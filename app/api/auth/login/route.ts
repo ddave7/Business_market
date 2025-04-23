@@ -1,74 +1,72 @@
 import { NextResponse } from "next/server"
 import { connectDB } from "@/lib/mongodb"
 import User from "@/models/User"
-import { SignJWT } from "jose"
-
-const secretKey = new TextEncoder().encode(process.env.JWT_SECRET || "fallback_secret_key_for_development")
+import bcrypt from "bcryptjs"
+import jwt from "jsonwebtoken"
+import { cookies } from "next/headers"
 
 export async function POST(req: Request) {
   try {
-    await connectDB()
-    console.log("Login attempt started")
-
     const { email, password } = await req.json()
+
     console.log("Login attempt for email:", email)
 
-    // Find user
-    const user = await User.findOne({ email }).select("+password")
-    if (!user) {
-      console.log("User not found for email:", email)
-      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 })
+    if (!email || !password) {
+      return NextResponse.json({ error: "Email and password are required" }, { status: 400 })
     }
 
-    const isMatch = await user.matchPassword(password)
-    if (!isMatch) {
-      console.log("Password does not match for email:", email)
-      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 })
-    }
+    await connectDB()
 
-    console.log("User authenticated successfully:", user._id)
-
-    // Convert ObjectId to string to ensure it's properly stored in the JWT
-    const userId = user._id.toString()
-    console.log("User ID as string:", userId)
-
-    // Create token
-    const token = await new SignJWT({
-      userId: userId, // Store as string
-      email: user.email,
+    // Find user by email (case-insensitive)
+    const user = await User.findOne({
+      email: { $regex: new RegExp(`^${email}$`, "i") },
     })
-      .setProtectedHeader({ alg: "HS256" })
-      .setIssuedAt()
-      .setExpirationTime("24h")
-      .sign(secretKey)
 
-    console.log("JWT token generated")
+    if (!user) {
+      console.log("User not found:", email)
+      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 })
+    }
 
-    // Create the response
-    const response = NextResponse.json({
-      success: true,
-      user: {
-        _id: userId,
-        businessName: user.businessName,
+    // Check if password is correct
+    const isPasswordValid = await bcrypt.compare(password, user.password)
+    if (!isPasswordValid) {
+      console.log("Invalid password for user:", email)
+      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 })
+    }
+
+    // Create JWT token
+    const token = jwt.sign(
+      {
+        userId: user._id,
         email: user.email,
       },
-    })
+      process.env.JWT_SECRET || "fallback_secret_key_for_development",
+      { expiresIn: "7d" },
+    )
 
-    // Set cookie with strict security options
-    response.cookies.set({
-      name: "auth_token",
-      value: token,
+    // Set cookie
+    const cookieStore = cookies()
+    cookieStore.set("auth_token", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "strict",
-      maxAge: 60 * 60 * 24, // 24 hours
+      maxAge: 7 * 24 * 60 * 60, // 7 days
       path: "/",
     })
 
-    console.log("Auth cookie set in response")
-    return response
+    console.log("Login successful for user:", email)
+    console.log("Token set in cookie:", !!token)
+
+    return NextResponse.json({
+      message: "Login successful",
+      user: {
+        _id: user._id,
+        email: user.email,
+        businessName: user.businessName,
+      },
+    })
   } catch (error) {
     console.error("Login error:", error)
-    return NextResponse.json({ error: "Error logging in" }, { status: 500 })
+    return NextResponse.json({ error: "An unexpected error occurred" }, { status: 500 })
   }
 }
