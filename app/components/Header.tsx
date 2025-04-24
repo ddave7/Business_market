@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useCallback } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Cart } from "./Cart"
@@ -9,75 +9,12 @@ import { Menu } from "lucide-react"
 import { useRouter } from "next/navigation"
 import DollarTransferAnimation from "./DollarTransferAnimation"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { useAuth } from "../contexts/AuthContext"
 
 export default function Header() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false)
-  const [userData, setUserData] = useState(null)
+  const { user, isLoading, isAuthenticated, refreshAuthState } = useAuth()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
-
-  const checkLoginStatus = useCallback(async () => {
-    setIsLoading(true)
-    try {
-      // Add a cache-busting parameter to prevent caching
-      const res = await fetch(`/api/auth/check?t=${Date.now()}`, {
-        credentials: "include",
-        cache: "no-store",
-        headers: {
-          "Cache-Control": "no-cache, no-store, must-revalidate",
-          Pragma: "no-cache",
-          Expires: "0",
-        },
-      })
-
-      if (!res.ok) {
-        throw new Error(`Auth check failed with status: ${res.status}`)
-      }
-
-      const data = await res.json()
-      console.log("Auth check response:", data)
-
-      setIsLoggedIn(data.authenticated)
-
-      // Store user data if available
-      if (data.authenticated && data.user) {
-        setUserData(data.user)
-      } else {
-        setUserData(null)
-      }
-    } catch (error) {
-      console.error("Error checking login status:", error)
-      setIsLoggedIn(false)
-      setUserData(null)
-    } finally {
-      setIsLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    checkLoginStatus()
-
-    // Set up an interval to periodically check login status
-    const intervalId = setInterval(checkLoginStatus, 60000) // Check every minute
-
-    return () => clearInterval(intervalId)
-  }, [checkLoginStatus])
-
-  // Force a re-check when the component becomes visible again
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        checkLoginStatus()
-      }
-    }
-
-    document.addEventListener("visibilitychange", handleVisibilityChange)
-
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange)
-    }
-  }, [checkLoginStatus])
 
   const handleNavigation = useCallback(
     (path: string) => {
@@ -86,6 +23,11 @@ export default function Header() {
     },
     [router],
   )
+
+  // Force refresh auth state when header mounts
+  useEffect(() => {
+    refreshAuthState()
+  }, [refreshAuthState])
 
   return (
     <header className="bg-background border-b shadow-sm">
@@ -108,8 +50,8 @@ export default function Header() {
               <div className="w-20 h-8">
                 <DollarTransferAnimation size="small" dollarsCount={1} speed="fast" />
               </div>
-            ) : isLoggedIn ? (
-              <UserMenu userData={userData} />
+            ) : isAuthenticated ? (
+              <UserMenu userData={user} />
             ) : (
               <Button onClick={() => handleNavigation("/login")}>Login</Button>
             )}
@@ -135,8 +77,8 @@ export default function Header() {
               <div className="w-full h-10 flex justify-center">
                 <DollarTransferAnimation size="small" dollarsCount={1} speed="fast" />
               </div>
-            ) : isLoggedIn ? (
-              <UserMenu userData={userData} />
+            ) : isAuthenticated ? (
+              <UserMenu userData={user} />
             ) : (
               <Button className="w-full" onClick={() => handleNavigation("/login")}>
                 Login
@@ -152,3 +94,5 @@ export default function Header() {
     </header>
   )
 }
+
+import { useEffect } from "react"
