@@ -59,16 +59,16 @@ export default function CheckoutPage() {
         throw new Error("Payment service is not configured properly. Missing Stripe publishable key.")
       }
 
-      // Prepare cart items for checkout
+      // Prepare cart items for checkout - ensure all required fields are present
       const checkoutItems = cart.map((item) => ({
-        id: item._id,
-        name: item.name,
-        price: item.price,
-        quantity: item.quantity,
-        imageUrl: item.imageUrl,
+        id: item._id || `temp-${Date.now()}`,
+        name: item.name || "Product",
+        price: item.price || 0,
+        quantity: item.quantity || 1,
+        imageUrl: item.imageUrl || "",
       }))
 
-      console.log("Sending checkout request with items:", checkoutItems)
+      console.log("Sending checkout request with items:", checkoutItems.length)
 
       // Create a checkout session
       const response = await fetch("/api/checkout", {
@@ -86,20 +86,27 @@ export default function CheckoutPage() {
         credentials: "include",
       })
 
-      const data = await response.json()
-
       if (!response.ok) {
-        console.error("Checkout API error:", data)
-        setErrorDetails(data)
-        throw new Error(data.error || data.details || "Failed to create checkout session")
+        const errorText = await response.text()
+        console.error("Checkout API error response:", errorText)
+
+        let errorData
+        try {
+          errorData = JSON.parse(errorText)
+        } catch (e) {
+          errorData = { error: "Invalid response from server", rawResponse: errorText }
+        }
+
+        setErrorDetails(errorData)
+        throw new Error(errorData.error || errorData.details || "Failed to create checkout session")
       }
 
-      const { sessionId } = data
-      console.log("Checkout session created:", sessionId)
+      const data = await response.json()
+      console.log("Checkout session created:", data.sessionId)
 
       // Redirect to Stripe Checkout
       const stripe = await stripePromise
-      const { error } = await stripe.redirectToCheckout({ sessionId })
+      const { error } = await stripe.redirectToCheckout({ sessionId: data.sessionId })
 
       if (error) {
         console.error("Stripe redirect error:", error)
@@ -146,12 +153,12 @@ export default function CheckoutPage() {
           <CardContent>
             <div className="space-y-4">
               {cart.map((item) => (
-                <div key={item._id} className="flex justify-between py-2 border-b">
+                <div key={item._id || item.name} className="flex justify-between py-2 border-b">
                   <div>
                     <p className="font-medium">{item.name}</p>
                     <p className="text-sm text-muted-foreground">Quantity: {item.quantity}</p>
                   </div>
-                  <p className="font-medium">${(item.price * item.quantity).toFixed(2)}</p>
+                  <p className="font-medium">${((item.price || 0) * (item.quantity || 1)).toFixed(2)}</p>
                 </div>
               ))}
 
