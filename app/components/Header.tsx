@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Cart } from "./Cart"
@@ -9,12 +9,64 @@ import { Menu } from "lucide-react"
 import { useRouter } from "next/navigation"
 import DollarTransferAnimation from "./DollarTransferAnimation"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { useAuth } from "../contexts/AuthContext"
 
 export default function Header() {
-  const { user, isLoading, isAuthenticated, refreshAuthState } = useAuth()
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [userData, setUserData] = useState(null)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
+
+  const checkLoginStatus = useCallback(async () => {
+    setIsLoading(true)
+    try {
+      const res = await fetch(`/api/auth/check?t=${Date.now()}`, {
+        credentials: "include",
+        cache: "no-store",
+        headers: {
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+      })
+
+      const data = await res.json()
+      setIsLoggedIn(data.authenticated)
+
+      // Store user data if available
+      if (data.authenticated && data.user) {
+        setUserData(data.user)
+      } else {
+        setUserData(null)
+      }
+    } catch (error) {
+      console.error("Error checking login status:", error)
+      setIsLoggedIn(false)
+      setUserData(null)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    checkLoginStatus()
+
+    // Set up an interval to periodically check login status
+    const intervalId = setInterval(checkLoginStatus, 60000) // Check every minute
+
+    // Check auth state when tab becomes visible
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        checkLoginStatus()
+      }
+    }
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+
+    return () => {
+      clearInterval(intervalId)
+      document.removeEventListener("visibilitychange", handleVisibilityChange)
+    }
+  }, [checkLoginStatus])
 
   const handleNavigation = useCallback(
     (path: string) => {
@@ -23,11 +75,6 @@ export default function Header() {
     },
     [router],
   )
-
-  // Force refresh auth state when header mounts
-  useEffect(() => {
-    refreshAuthState()
-  }, [refreshAuthState])
 
   return (
     <header className="bg-background border-b shadow-sm">
@@ -50,8 +97,8 @@ export default function Header() {
               <div className="w-20 h-8">
                 <DollarTransferAnimation size="small" dollarsCount={1} speed="fast" />
               </div>
-            ) : isAuthenticated ? (
-              <UserMenu userData={user} />
+            ) : isLoggedIn ? (
+              <UserMenu userData={userData} />
             ) : (
               <Button onClick={() => handleNavigation("/login")}>Login</Button>
             )}
@@ -77,8 +124,8 @@ export default function Header() {
               <div className="w-full h-10 flex justify-center">
                 <DollarTransferAnimation size="small" dollarsCount={1} speed="fast" />
               </div>
-            ) : isAuthenticated ? (
-              <UserMenu userData={user} />
+            ) : isLoggedIn ? (
+              <UserMenu userData={userData} />
             ) : (
               <Button className="w-full" onClick={() => handleNavigation("/login")}>
                 Login
@@ -94,5 +141,3 @@ export default function Header() {
     </header>
   )
 }
-
-import { useEffect } from "react"

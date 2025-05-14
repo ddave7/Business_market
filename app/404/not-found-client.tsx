@@ -1,29 +1,18 @@
-"use client"
-
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { useSearchParams } from "next/navigation"
-
 export default function NotFoundClient() {
-  // This is now safely wrapped in a client component that will be wrapped in Suspense
-  const searchParams = useSearchParams()
-  const from = searchParams.get("from") || ""
-
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
       <h1 className="text-4xl font-bold mb-4">404 - Page Not Found</h1>
-      <p className="text-lg text-muted-foreground mb-8">
-        {from
-          ? `The page "${from}" doesn't exist or has been moved.`
-          : "The page you're looking for doesn't exist or has been moved."}
-      </p>
+      <p className="text-lg text-muted-foreground mb-8">The page you're looking for doesn't exist or has been moved.</p>
       <div className="flex gap-4">
-        <Link href="/">
-          <Button>Return Home</Button>
-        </Link>
-        <Link href="/products">
-          <Button variant="outline">Browse Products</Button>
-        </Link>
+        <a href="/" className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">
+          Return Home
+        </a>
+        <a
+          href="/products"
+          className="px-4 py-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground rounded-md"
+        >
+          Browse Products
+        </a>
       </div>
     </div>
   )
