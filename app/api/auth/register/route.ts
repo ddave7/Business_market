@@ -1,57 +1,71 @@
 import { NextResponse } from "next/server"
 import { connectDB } from "@/lib/mongodb"
 import User from "@/models/User"
+import jwt from "jsonwebtoken"
+import { cookies } from "next/headers"
 
 export async function POST(req: Request) {
   try {
-    console.log("Registration attempt started")
+    // Connect to database
     await connectDB()
-    console.log("Connected to MongoDB")
 
-    const { businessName, email, password, description } = await req.json()
-    console.log("Received registration data:", { businessName, email, description })
+    // Get user data from request body
+    const { name, email, password, role = "business" } = await req.json()
 
-    // Check if user exists
-    const userExists = await User.findOne({ email })
-    console.log("User exists check:", userExists ? "Yes" : "No")
+    // Validate required fields
+    if (!name || !email || !password) {
+      return NextResponse.json({ error: "Please provide all required fields" }, { status: 400 })
+    }
 
-    if (userExists) {
+    // Check if user already exists
+    const existingUser = await User.findOne({
+      email: { $regex: new RegExp(`^${email}$`, "i") },
+    })
+
+    if (existingUser) {
       return NextResponse.json({ error: "User already exists" }, { status: 400 })
     }
 
     // Create user
-    try {
-      console.log("Attempting to create user")
-      const user = await User.create({
-        businessName,
-        password,
-        email,
-        description,
-      })
-      console.log("User created successfully:", user._id)
+    const user = await User.create({
+      name,
+      email: email.toLowerCase(),
+      password,
+      role,
+      isVerified: true, // Auto-verify all users
+    })
 
-      return NextResponse.json(
-        {
-          _id: user._id,
-          businessName: user.businessName,
-          email: user.email,
-        },
-        { status: 201 },
-      )
-    } catch (error) {
-      console.error("Error creating user:", error)
-      if (error instanceof Error && "errors" in (error as any)) {
-        const validationErrors = Object.values((error as any).errors).map((err: any) => err.message)
-        console.log("Validation errors:", validationErrors)
-        return NextResponse.json({ error: "Validation failed", details: validationErrors }, { status: 400 })
-      }
-      throw error
-    }
-  } catch (error) {
-    console.error("Unexpected registration error:", error)
-    return NextResponse.json(
-      { error: "Error registering user", details: error instanceof Error ? error.message : "Unknown error" },
-      { status: 500 },
+    // Create token
+    const token = jwt.sign(
+      { userId: user._id, email: user.email },
+      process.env.JWT_SECRET || "fallback_secret_key_for_development",
+      { expiresIn: "7d" },
     )
+
+    // Set cookie
+    cookies().set({
+      name: "auth_token",
+      value: token,
+      httpOnly: true,
+      path: "/",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 60 * 60 * 24 * 7, // 7 days
+      sameSite: "lax",
+    })
+
+    // Return success response
+    return NextResponse.json({
+      success: true,
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        isVerified: true,
+      },
+    })
+  } catch (error) {
+    console.error("Registration error:", error)
+    return NextResponse.json({ error: "An unexpected error occurred" }, { status: 500 })
   }
 }

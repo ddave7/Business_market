@@ -1,129 +1,43 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
-import { useRouter } from "next/navigation"
+import type React from "react"
 
-type User = {
-  _id: string
-  email: string
-  businessName: string
-}
+import { createContext, useContext, useCallback } from "react"
+import { useAuthStatus, loginUser, logoutUser } from "@/lib/auth-client"
 
-type AuthContextType = {
-  user: User | null
+interface AuthContextType {
+  user: any | null
   isLoading: boolean
   isAuthenticated: boolean
+  refreshAuthState: () => void
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
-  logout: () => Promise<void>
-  refreshAuthState: () => Promise<void>
+  logout: () => Promise<{ success: boolean; error?: string }>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const router = useRouter()
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const { user, isLoading, isAuthenticated, refreshAuth } = useAuthStatus()
 
-  const refreshAuthState = async () => {
-    try {
-      setIsLoading(true)
-      const res = await fetch(`/api/auth/check?t=${Date.now()}`, {
-        credentials: "include",
-        cache: "no-store",
-        headers: {
-          "Cache-Control": "no-cache, no-store, must-revalidate",
-          Pragma: "no-cache",
-          Expires: "0",
-        },
-      })
-
-      const data = await res.json()
-      console.log("Auth check response:", data)
-
-      if (data.authenticated && data.user) {
-        setUser(data.user)
-        setIsAuthenticated(true)
-      } else {
-        setUser(null)
-        setIsAuthenticated(false)
-      }
-    } catch (error) {
-      console.error("Error checking auth state:", error)
-      setUser(null)
-      setIsAuthenticated(false)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    refreshAuthState()
-
-    // Check auth state periodically
-    const intervalId = setInterval(refreshAuthState, 60000) // every minute
-
-    // Check auth state when tab becomes visible
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        refreshAuthState()
-      }
-    }
-    document.addEventListener("visibilitychange", handleVisibilityChange)
-
-    return () => {
-      clearInterval(intervalId)
-      document.removeEventListener("visibilitychange", handleVisibilityChange)
-    }
+  const login = useCallback(async (email: string, password: string) => {
+    return await loginUser(email, password)
   }, [])
 
-  const login = async (email: string, password: string) => {
-    try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email, password }),
-      })
-
-      const data = await res.json()
-
-      if (!res.ok) {
-        return { success: false, error: data.error || "Login failed" }
-      }
-
-      // Immediately refresh auth state after successful login
-      await refreshAuthState()
-
-      return { success: true }
-    } catch (error) {
-      console.error("Login error:", error)
-      return { success: false, error: "An unexpected error occurred" }
-    }
-  }
-
-  const logout = async () => {
-    try {
-      await fetch("/api/auth/logout", {
-        method: "POST",
-        credentials: "include",
-      })
-
-      // Clear auth state
-      setUser(null)
-      setIsAuthenticated(false)
-
-      // Redirect to home page
-      router.push("/")
-    } catch (error) {
-      console.error("Logout error:", error)
-    }
-  }
+  const logout = useCallback(async () => {
+    return await logoutUser()
+  }, [])
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, isAuthenticated, login, logout, refreshAuthState }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        isLoading,
+        isAuthenticated,
+        refreshAuthState: refreshAuth,
+        login,
+        logout,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   )
@@ -131,7 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext)
-  if (context === undefined) {
+  if (!context) {
     throw new Error("useAuth must be used within an AuthProvider")
   }
   return context
