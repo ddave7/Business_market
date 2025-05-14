@@ -1,17 +1,20 @@
 import { NextResponse } from "next/server"
 import { connectDB } from "@/lib/mongodb"
 import { getUserFromToken } from "@/lib/auth"
-import Stripe from "stripe"
+import { getStripeInstance } from "@/lib/stripe"
 
-// Initialize Stripe with better error handling
-const stripeSecretKey = process.env.STRIPE_SECRET_KEY
-if (!stripeSecretKey) {
-  console.error("STRIPE_SECRET_KEY is not defined in environment variables")
+// Helper function to check if a URL is a data URL or too long
+function isValidImageUrl(url: string): boolean {
+  if (!url) return false
+
+  // Check if it's a data URL (starts with data:)
+  if (url.startsWith("data:")) return false
+
+  // Check if URL is too long for Stripe (limit is 2048 characters)
+  if (url.length > 2000) return false
+
+  return true
 }
-
-const stripe = new Stripe(stripeSecretKey || "", {
-  apiVersion: "2023-10-16",
-})
 
 export async function POST(req: Request) {
   console.log("Checkout API: Starting checkout process")
@@ -65,6 +68,22 @@ export async function POST(req: Request) {
       // Continue as guest checkout
     }
 
+    // Get Stripe instance
+    let stripe
+    try {
+      stripe = getStripeInstance()
+      console.log("Checkout API: Stripe instance created successfully")
+    } catch (stripeError) {
+      console.error("Checkout API: Error creating Stripe instance:", stripeError)
+      return NextResponse.json(
+        {
+          error: "Stripe configuration error",
+          details: stripeError instanceof Error ? stripeError.message : String(stripeError),
+        },
+        { status: 500 },
+      )
+    }
+
     // Create line items for Stripe with simplified approach
     const lineItems = items.map((item) => {
       return {
@@ -87,11 +106,6 @@ export async function POST(req: Request) {
 
     // Create Stripe checkout session
     try {
-      if (!stripeSecretKey) {
-        console.error("Checkout API: Missing Stripe secret key")
-        return NextResponse.json({ error: "Stripe configuration error" }, { status: 500 })
-      }
-
       const origin = req.headers.get("origin") || process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"
       console.log("Checkout API: Using origin for redirect:", origin)
 

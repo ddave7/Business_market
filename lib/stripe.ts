@@ -4,22 +4,39 @@ import Stripe from "stripe"
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY
 if (!stripeSecretKey) {
   console.error("STRIPE_SECRET_KEY is not defined in environment variables")
+} else if (stripeSecretKey.includes("***") || stripeSecretKey === "your_stripe_secret_key_here") {
+  console.error("STRIPE_SECRET_KEY appears to be a placeholder and not a valid key")
 }
 
-const stripe = new Stripe(stripeSecretKey || "", {
-  apiVersion: "2023-10-16", // Use the latest API version
-  timeout: 30000, // 30 second timeout
-})
+// Create a function to get a Stripe instance that validates the key first
+export function getStripeInstance() {
+  if (!stripeSecretKey || stripeSecretKey.includes("***") || stripeSecretKey === "your_stripe_secret_key_here") {
+    throw new Error(
+      "Invalid or missing Stripe secret key. Please set a valid STRIPE_SECRET_KEY in your environment variables.",
+    )
+  }
+
+  return new Stripe(stripeSecretKey, {
+    apiVersion: "2023-10-16",
+    timeout: 30000, // 30 second timeout
+  })
+}
+
+// Export a default instance for backward compatibility
+const stripe = stripeSecretKey
+  ? new Stripe(stripeSecretKey, {
+      apiVersion: "2023-10-16",
+      timeout: 30000,
+    })
+  : null
 
 export default stripe
 
 export async function createPaymentIntent(amount: number, currency = "usd", metadata: any = {}) {
   try {
-    if (!stripeSecretKey) {
-      throw new Error("Stripe secret key is missing")
-    }
+    const stripeInstance = getStripeInstance()
 
-    const paymentIntent = await stripe.paymentIntents.create({
+    const paymentIntent = await stripeInstance.paymentIntents.create({
       amount: Math.round(amount * 100), // Stripe requires amount in cents
       currency,
       metadata,
@@ -40,11 +57,9 @@ export async function createPaymentIntent(amount: number, currency = "usd", meta
 
 export async function retrievePaymentIntent(paymentIntentId: string) {
   try {
-    if (!stripeSecretKey) {
-      throw new Error("Stripe secret key is missing")
-    }
+    const stripeInstance = getStripeInstance()
 
-    return await stripe.paymentIntents.retrieve(paymentIntentId)
+    return await stripeInstance.paymentIntents.retrieve(paymentIntentId)
   } catch (error) {
     console.error("Error retrieving payment intent:", error)
     throw error
