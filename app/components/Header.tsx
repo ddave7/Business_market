@@ -20,6 +20,7 @@ export default function Header() {
   const checkLoginStatus = useCallback(async () => {
     setIsLoading(true)
     try {
+      // Add a cache-busting parameter to prevent caching
       const res = await fetch(`/api/auth/check?t=${Date.now()}`, {
         credentials: "include",
         cache: "no-store",
@@ -30,7 +31,13 @@ export default function Header() {
         },
       })
 
+      if (!res.ok) {
+        throw new Error(`Auth check failed with status: ${res.status}`)
+      }
+
       const data = await res.json()
+      console.log("Auth check response:", data)
+
       setIsLoggedIn(data.authenticated)
 
       // Store user data if available
@@ -54,16 +61,20 @@ export default function Header() {
     // Set up an interval to periodically check login status
     const intervalId = setInterval(checkLoginStatus, 60000) // Check every minute
 
-    // Check auth state when tab becomes visible
+    return () => clearInterval(intervalId)
+  }, [checkLoginStatus])
+
+  // Force a re-check when the component becomes visible again
+  useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
         checkLoginStatus()
       }
     }
+
     document.addEventListener("visibilitychange", handleVisibilityChange)
 
     return () => {
-      clearInterval(intervalId)
       document.removeEventListener("visibilitychange", handleVisibilityChange)
     }
   }, [checkLoginStatus])

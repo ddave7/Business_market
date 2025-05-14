@@ -1,113 +1,72 @@
 import { NextResponse } from "next/server"
+import { getUserFromToken } from "@/lib/auth"
+import { retrievePaymentIntent } from "@/lib/stripe"
 import { connectDB } from "@/lib/mongodb"
-import Stripe from "stripe"
 import Order from "@/models/Order"
-import Product from "@/models/Product"
-import { sendOrderConfirmationEmail } from "@/lib/email"
-import { createNotification } from "@/lib/notifications"
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", {
-  apiVersion: "2023-10-16",
-})
 
 export async function POST(req: Request) {
   try {
-    // Connect to database
     await connectDB()
 
-    // Get session ID from request
-    const { sessionId } = await req.json()
-    if (!sessionId) {
-      return NextResponse.json({ error: "Session ID is required" }, { status: 400 })
+    // Authenticate user
+    const user = await getUserFromToken(req)
+    if (!user) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 })
     }
 
-    // Retrieve session from Stripe
-    const session = await stripe.checkout.sessions.retrieve(sessionId)
-    if (!session) {
-      return NextResponse.json({ error: "Invalid session ID" }, { status: 400 })
+    // Get payment details from request
+    const { paymentIntentId, orderId } = await req.json()
+
+    if (!paymentIntentId || !orderId) {
+      return NextResponse.json({ error: "Missing payment intent ID or order ID" }, { status: 400 })
     }
 
-    // Check if order already exists for this session
-    const existingOrder = await Order.findOne({ stripeSessionId: sessionId })
-    if (existingOrder) {
-      return NextResponse.json({ order: existingOrder })
-    }
+    // Retrieve payment intent to verify payment status
+    const paymentIntent = await retrievePaymentIntent(paymentIntentId)
 
-    // Get product details from metadata
-    const productDetails = JSON.parse(session.metadata?.productDetails || "[]")
-    if (!productDetails.length) {
-      return NextResponse.json({ error: "No product details found" }, { status: 400 })
-    }
-
-    // Calculate total
-    const total = productDetails.reduce((sum, item) => sum + item.price * item.quantity, 0)
-
-    // Create order
-    const order = await Order.create({
-      user: session.metadata?.userId,
-      items: productDetails,
-      total,
-      status: "paid",
-      stripeSessionId: sessionId,
-      stripePaymentIntentId: session.payment_intent,
-      shippingAddress: session.shipping?.address || {},
-      customerName: session.shipping?.name || session.customer_details?.name || "",
-      customerEmail: session.customer_details?.email || "",
-    })
-
-    // Update product stock
-    for (const item of productDetails) {
-      await Product.findByIdAndUpdate(item.product, {
-        $inc: { stock: -item.quantity },
-      })
-    }
-
-    // Send confirmation email
-    try {
-      await sendOrderConfirmationEmail({
-        to: order.customerEmail,
-        order: {
-          id: order._id.toString(),
-          items: order.items,
-          total: order.total,
-          date: order.createdAt,
+    if (paymentIntent.status !== "succeeded") {
+      return NextResponse.json(
+        {
+          error: "Payment not completed",
+          status: paymentIntent.status,
         },
-      })
-    } catch (emailError) {
-      console.error("Error sending confirmation email:", emailError)
+        { status: 400 },
+      )
     }
 
-    // Create notifications for businesses
-    try {
-      // Group items by business
-      const businessItems = {}
-      for (const item of productDetails) {
-        if (!businessItems[item.business]) {
-          businessItems[item.business] = []
-        }
-        businessItems[item.business].push(item)
-      }
+    // Update order with payment details
+    const order = await Order.findById(orderId)
 
-      // Create notification for each business
-      for (const [businessId, items] of Object.entries(businessItems)) {
-        await createNotification({
-          user: businessId,
-          type: "new_order",
-          title: "New Order Received",
-          message: `You have received a new order with ${items.length} product(s).`,
-          data: {
-            orderId: order._id.toString(),
-            items,
-          },
-        })
-      }
-    } catch (notificationError) {
-      console.error("Error creating notifications:", notificationError)
+    if (!order) {
+      return NextResponse.json({ error: "Order not found" }, { status: 404 })
     }
 
-    return NextResponse.json({ order })
+    if (order.user.toString() !== user._id.toString()) {
+      return NextResponse.json({ error: "Unauthorized access to order" }, { status: 403 })
+    }
+
+    // Update order with payment details
+    order.status = "processing"
+    order.paymentDetails = {
+      transactionId: paymentIntentId,
+      cardBrand: paymentIntent.payment_method_details?.card?.brand || "unknown",
+      cardLastFour: paymentIntent.payment_method_details?.card?.last4 || "xxxx",
+    }
+
+    await order.save()
+
+    return NextResponse.json({
+      success: true,
+      order: {
+        id: order._id,
+        status: order.status,
+      },
+    })
   } catch (error) {
     console.error("Payment confirmation error:", error)
-    return NextResponse.json({ error: "An unexpected error occurred" }, { status: 500 })
+    return NextResponse.json(
+      { error: "Failed to confirm payment", details: error instanceof Error ? error.message : "Unknown error" },
+      { status: 500 },
+    )
   }
 }

@@ -3,11 +3,8 @@ import { cookies } from "next/headers"
 import { jwtVerify } from "jose"
 import { connectDB } from "@/lib/mongodb"
 import User from "@/models/User"
-import mongoose from "mongoose"
 
 const secretKey = new TextEncoder().encode(process.env.JWT_SECRET || "fallback_secret_key_for_development")
-
-export const dynamic = "force-dynamic" // Disable caching for this route
 
 export async function GET(req: Request) {
   console.log("Auth check API called")
@@ -20,17 +17,7 @@ export async function GET(req: Request) {
     console.log("Auth token present:", !!token)
 
     if (!token) {
-      return NextResponse.json(
-        { authenticated: false },
-        {
-          status: 200,
-          headers: {
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            Pragma: "no-cache",
-            Expires: "0",
-          },
-        },
-      )
+      return NextResponse.json({ authenticated: false }, { status: 200 })
     }
 
     // Verify token
@@ -41,32 +28,12 @@ export async function GET(req: Request) {
       console.log("Token verified successfully")
     } catch (error) {
       console.error("Token verification failed:", error)
-      return NextResponse.json(
-        { authenticated: false, error: "Invalid token" },
-        {
-          status: 200,
-          headers: {
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            Pragma: "no-cache",
-            Expires: "0",
-          },
-        },
-      )
+      return NextResponse.json({ authenticated: false, error: "Invalid token" }, { status: 200 })
     }
 
     if (!payload.userId) {
       console.log("No userId in token payload")
-      return NextResponse.json(
-        { authenticated: false, error: "Invalid token format" },
-        {
-          status: 200,
-          headers: {
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            Pragma: "no-cache",
-            Expires: "0",
-          },
-        },
-      )
+      return NextResponse.json({ authenticated: false, error: "Invalid token format" }, { status: 200 })
     }
 
     // Connect to database and get user
@@ -86,17 +53,7 @@ export async function GET(req: Request) {
 
       if (!user) {
         console.log("User not found in database")
-        return NextResponse.json(
-          { authenticated: false, error: "User not found" },
-          {
-            status: 200,
-            headers: {
-              "Cache-Control": "no-cache, no-store, must-revalidate",
-              Pragma: "no-cache",
-              Expires: "0",
-            },
-          },
-        )
+        return NextResponse.json({ authenticated: false, error: "User not found" }, { status: 200 })
       }
 
       console.log("User found, authentication successful")
@@ -104,9 +61,10 @@ export async function GET(req: Request) {
         {
           authenticated: true,
           user: {
-            _id: user._id.toString(),
+            _id: user._id,
             email: user.email,
             businessName: user.businessName,
+            description: user.description,
           },
         },
         {
@@ -120,30 +78,12 @@ export async function GET(req: Request) {
       )
     } catch (error) {
       console.error("Database error:", error)
-      return NextResponse.json(
-        { authenticated: false, error: "Database error" },
-        {
-          status: 200,
-          headers: {
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            Pragma: "no-cache",
-            Expires: "0",
-          },
-        },
-      )
+      return NextResponse.json({ authenticated: false, error: "Database error" }, { status: 200 })
     }
   } catch (error) {
     console.error("Unexpected error in auth check:", error)
-    return NextResponse.json(
-      { authenticated: false, error: "Server error" },
-      {
-        status: 200,
-        headers: {
-          "Cache-Control": "no-cache, no-store, must-revalidate",
-          Pragma: "no-cache",
-          Expires: "0",
-        },
-      },
-    )
+    return NextResponse.json({ authenticated: false, error: "Server error" }, { status: 200 })
   }
 }
+
+import mongoose from "mongoose"

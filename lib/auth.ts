@@ -83,11 +83,6 @@ export async function getUserFromToken(req: Request) {
         return null
       }
 
-      // Ensure user._id is a string
-      if (user._id && typeof user._id !== "string") {
-        user._id = user._id.toString()
-      }
-
       return user
     } catch (userError) {
       console.error("Error finding user:", userError)

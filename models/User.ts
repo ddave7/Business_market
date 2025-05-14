@@ -1,35 +1,36 @@
 import mongoose from "mongoose"
 import bcrypt from "bcryptjs"
-import crypto from "crypto"
 
+// Check if the model already exists to prevent recompilation errors
 const userSchema = new mongoose.Schema({
-  name: {
+  businessName: {
     type: String,
-    required: [true, "Please add a name"],
+    required: [true, "Please add a business name"],
+    trim: true,
+    minlength: [2, "Business name must be at least 2 characters long"],
+    maxlength: [50, "Business name cannot exceed 50 characters"],
   },
   email: {
     type: String,
     required: [true, "Please add an email"],
     unique: true,
-    match: [/^\S+@\S+\.\S+$/, "Please add a valid email"],
+    lowercase: true,
+    trim: true,
+    match: [/^\S+@\S+\.\S+$/, "Please enter a valid email address"],
   },
   password: {
     type: String,
     required: [true, "Please add a password"],
-    minlength: 6,
+    minlength: [6, "Password must be at least 6 characters long"],
     select: false,
   },
-  role: {
+  description: {
     type: String,
-    enum: ["user", "business", "admin"],
-    default: "business", // Changed default to business
+    required: [true, "Please add a business description"],
+    trim: true,
+    minlength: [10, "Description must be at least 10 characters long"],
+    maxlength: [500, "Description cannot exceed 500 characters"],
   },
-  isVerified: {
-    type: Boolean,
-    default: true, // Changed default to true
-  },
-  verificationToken: String,
-  verificationTokenExpiry: Date,
   createdAt: {
     type: Date,
     default: Date.now,
@@ -38,42 +39,43 @@ const userSchema = new mongoose.Schema({
 
 // Encrypt password using bcrypt
 userSchema.pre("save", async function (next) {
-  if (!this.isModified("password")) {
-    next()
-  }
-
   try {
+    // Only hash the password if it has been modified (or is new)
+    if (!this.isModified("password")) {
+      return next()
+    }
+
+    console.log("Hashing password for user")
+
+    // Use a lower salt round for faster hashing (still secure)
     const salt = await bcrypt.genSalt(10)
     this.password = await bcrypt.hash(this.password, salt)
+
+    console.log("Password hashed successfully")
     next()
   } catch (error) {
     console.error("Error hashing password:", error)
-    next(error)
+    next(error as Error)
   }
 })
 
-// Generate verification token
-userSchema.methods.getVerificationToken = function () {
-  // Generate token
-  const token = crypto.randomBytes(20).toString("hex")
-
-  // Hash token and set to verificationToken field
-  this.verificationToken = crypto.createHash("sha256").update(token).digest("hex")
-
-  // Set expiry
-  this.verificationTokenExpiry = Date.now() + 24 * 60 * 60 * 1000 // 24 hours
-
-  return token
-}
-
 // Match user entered password to hashed password in database
-userSchema.methods.matchPassword = async function (enteredPassword) {
+userSchema.methods.matchPassword = async function (enteredPassword: string) {
   try {
-    return await bcrypt.compare(enteredPassword, this.password)
+    console.log("Comparing password")
+    if (!this.password) {
+      console.error("Password field is missing from user document")
+      return false
+    }
+
+    const result = await bcrypt.compare(enteredPassword, this.password)
+    console.log("Password comparison result:", result)
+    return result
   } catch (error) {
     console.error("Error comparing passwords:", error)
-    return false
+    throw error
   }
 }
 
+// Use a safer way to check if model exists before creating it
 export default mongoose.models.User || mongoose.model("User", userSchema)

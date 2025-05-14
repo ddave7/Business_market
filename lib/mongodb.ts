@@ -43,37 +43,6 @@ export async function connectDB() {
   }
 }
 
-export async function connectToDatabase() {
-  try {
-    if (cached.conn) {
-      console.log("Using existing database connection")
-      return { db: mongoose.connection.db }
-    }
-
-    if (!cached.promise) {
-      const opts = {
-        bufferCommands: false,
-        connectTimeoutMS: 10000,
-        socketTimeoutMS: 45000,
-        serverSelectionTimeoutMS: 10000,
-      }
-
-      console.log("Creating new database connection")
-      cached.promise = mongoose.connect(MONGODB_URI!, opts).then((mongoose) => {
-        console.log("Connected to MongoDB")
-        return mongoose
-      })
-    }
-
-    cached.conn = await cached.promise
-    return { db: mongoose.connection.db }
-  } catch (e) {
-    cached.promise = null
-    console.error("Failed to connect to MongoDB:", e)
-    throw e
-  }
-}
-
 // Add connection event handlers
 mongoose.connection.on("error", (err) => {
   console.error("MongoDB connection error:", err)

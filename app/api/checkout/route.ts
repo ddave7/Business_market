@@ -1,144 +1,119 @@
 import { NextResponse } from "next/server"
 import { connectDB } from "@/lib/mongodb"
-import Product from "@/models/Product"
 import { getUserFromToken } from "@/lib/auth"
 import Stripe from "stripe"
 
-// Initialize Stripe
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", {
+// Initialize Stripe with more explicit error handling
+const stripeSecretKey = process.env.STRIPE_SECRET_KEY
+if (!stripeSecretKey) {
+  console.error("STRIPE_SECRET_KEY is not defined in environment variables")
+}
+
+const stripe = new Stripe(stripeSecretKey || "", {
   apiVersion: "2023-10-16",
 })
 
+// Helper function to check if a URL is a data URL or too long
+function isValidImageUrl(url: string): boolean {
+  if (!url) return false
+
+  // Check if it's a data URL (starts with data:)
+  if (url.startsWith("data:")) return false
+
+  // Check if URL is too long for Stripe (limit is 2048 characters)
+  if (url.length > 2000) return false
+
+  return true
+}
+
 export async function POST(req: Request) {
-  console.log("Checkout API: Starting checkout process")
+  console.log("Checkout API called")
 
   try {
     // Connect to database
     try {
       await connectDB()
-      console.log("Checkout API: Connected to database")
+      console.log("Connected to database")
     } catch (dbError) {
-      console.error("Checkout API: Database connection error:", dbError)
+      console.error("Database connection error:", dbError)
       return NextResponse.json(
-        {
-          error: "Failed to connect to database",
-          details: dbError instanceof Error ? dbError.message : String(dbError),
-        },
+        { error: "Database connection failed", details: dbError instanceof Error ? dbError.message : "Unknown error" },
         { status: 500 },
       )
     }
 
-    // Get user from token
+    // Authenticate user
     let user
     try {
       user = await getUserFromToken(req)
-      console.log("Checkout API: User authentication check:", user ? "Authenticated" : "Not authenticated")
+      if (!user) {
+        console.log("User not authenticated")
+        return NextResponse.json({ error: "Authentication required" }, { status: 401 })
+      }
+      console.log("User authenticated:", user._id)
     } catch (authError) {
-      console.error("Checkout API: Authentication error:", authError)
+      console.error("Authentication error:", authError)
       return NextResponse.json(
-        { error: "Authentication error", details: authError instanceof Error ? authError.message : String(authError) },
+        { error: "Authentication failed", details: authError instanceof Error ? authError.message : "Unknown error" },
         { status: 401 },
       )
     }
 
     // Parse request body
-    let cartItems
+    let requestData
     try {
-      const body = await req.json()
-      cartItems = body.items
-
-      if (!cartItems || !Array.isArray(cartItems) || cartItems.length === 0) {
-        console.error("Checkout API: Invalid cart items:", cartItems)
-        return NextResponse.json({ error: "Invalid cart items" }, { status: 400 })
-      }
-
-      console.log("Checkout API: Received cart items:", JSON.stringify(cartItems).substring(0, 200) + "...")
+      requestData = await req.json()
+      console.log("Received checkout data with", requestData.items?.length || 0, "items")
     } catch (parseError) {
-      console.error("Checkout API: Error parsing request body:", parseError)
-      return NextResponse.json(
-        {
-          error: "Invalid request format",
-          details: parseError instanceof Error ? parseError.message : String(parseError),
-        },
-        { status: 400 },
-      )
+      console.error("Error parsing request body:", parseError)
+      return NextResponse.json({ error: "Invalid request body" }, { status: 400 })
     }
 
-    // Validate products and prepare line items
-    const lineItems = []
-    const productDetails = []
+    const { items, subtotal, tax, shipping, total } = requestData
 
-    try {
-      // Get product details and validate
-      for (const item of cartItems) {
-        if (!item.id || !item.quantity) {
-          console.error("Checkout API: Invalid item in cart:", item)
-          return NextResponse.json({ error: "Invalid item in cart" }, { status: 400 })
-        }
-
-        const product = await Product.findById(item.id).populate("business", "name email")
-
-        if (!product) {
-          console.error(`Checkout API: Product not found: ${item.id}`)
-          return NextResponse.json({ error: `Product not found: ${item.id}` }, { status: 404 })
-        }
-
-        // No business verification check here anymore
-
-        // Store product details for order creation
-        productDetails.push({
-          product: product._id,
-          name: product.name,
-          price: product.price,
-          quantity: item.quantity,
-          business: product.business._id,
-          businessName: product.business.name,
-          businessEmail: product.business.email,
-        })
-
-        // Prepare Stripe line item
-        lineItems.push({
-          price_data: {
-            currency: "usd",
-            product_data: {
-              name: product.name,
-              description: product.description.substring(0, 500), // Stripe limits description length
-              images: product.imageUrl
-                ? [
-                    product.imageUrl.startsWith("http")
-                      ? product.imageUrl
-                      : `${process.env.NEXT_PUBLIC_API_URL || ""}${product.imageUrl}`,
-                  ]
-                : [],
-            },
-            unit_amount: Math.round(product.price * 100), // Convert to cents
-          },
-          quantity: item.quantity,
-        })
-      }
-
-      console.log("Checkout API: Prepared line items:", JSON.stringify(lineItems).substring(0, 200) + "...")
-    } catch (productError) {
-      console.error("Checkout API: Error validating products:", productError)
-      return NextResponse.json(
-        {
-          error: "Error validating products",
-          details: productError instanceof Error ? productError.message : String(productError),
-        },
-        { status: 500 },
-      )
+    if (!items || !items.length) {
+      console.log("No items in cart")
+      return NextResponse.json({ error: "No items in cart" }, { status: 400 })
     }
 
-    // Create Stripe checkout session
-    try {
-      if (!process.env.STRIPE_SECRET_KEY) {
-        console.error("Checkout API: Missing Stripe secret key")
-        return NextResponse.json({ error: "Stripe configuration error" }, { status: 500 })
+    // Validate Stripe is properly initialized
+    if (!stripeSecretKey) {
+      console.error("Stripe secret key is missing")
+      return NextResponse.json({ error: "Payment service configuration error" }, { status: 500 })
+    }
+
+    console.log("Creating Stripe checkout session...")
+
+    // Create line items for Stripe with image URL validation
+    const lineItems = items.map((item) => {
+      // Create a product data object
+      const productData = {
+        name: item.name,
       }
 
-      const origin = req.headers.get("origin") || process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"
-      console.log("Checkout API: Using origin for redirect:", origin)
+      // Only add images if the URL is valid and not too long
+      if (item.imageUrl && isValidImageUrl(item.imageUrl)) {
+        productData.images = [item.imageUrl]
+      } else {
+        console.log(`Skipping invalid image URL for item: ${item.name}`)
+      }
 
+      return {
+        price_data: {
+          currency: "usd",
+          product_data: productData,
+          unit_amount: Math.round(item.price * 100), // Stripe uses cents
+        },
+        quantity: item.quantity,
+      }
+    })
+
+    // Get origin for success and cancel URLs
+    const origin = req.headers.get("origin") || "http://localhost:3000"
+    console.log("Using origin for redirect URLs:", origin)
+
+    // Create Stripe checkout session with try/catch
+    try {
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ["card"],
         line_items: lineItems,
@@ -146,28 +121,45 @@ export async function POST(req: Request) {
         success_url: `${origin}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${origin}/checkout?canceled=true`,
         metadata: {
-          productDetails: JSON.stringify(productDetails),
-          userId: user ? user._id.toString() : "guest",
+          userId: user._id.toString(),
+          orderReference: `order_ref_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`,
         },
+        shipping_options: [
+          {
+            shipping_rate_data: {
+              type: "fixed_amount",
+              fixed_amount: {
+                amount: Math.round(shipping * 100),
+                currency: "usd",
+              },
+              display_name: shipping === 0 ? "Free shipping" : "Standard shipping",
+            },
+          },
+        ],
       })
 
-      console.log("Checkout API: Created Stripe session:", session.id)
-      return NextResponse.json({ sessionId: session.id, url: session.url })
+      console.log("Checkout session created successfully:", session.id)
+
+      return NextResponse.json({ sessionId: session.id })
     } catch (stripeError) {
-      console.error("Checkout API: Stripe error:", stripeError)
+      console.error("Stripe error creating checkout session:", stripeError)
       return NextResponse.json(
         {
-          error: "Error creating checkout session",
-          details: stripeError instanceof Error ? stripeError.message : String(stripeError),
+          error: "Failed to create checkout session",
+          details: stripeError instanceof Error ? stripeError.message : "Unknown Stripe error",
           stripeError: stripeError,
         },
         { status: 500 },
       )
     }
   } catch (error) {
-    console.error("Checkout API: Unexpected error:", error)
+    console.error("Unexpected error creating checkout session:", error)
     return NextResponse.json(
-      { error: "Unexpected error", details: error instanceof Error ? error.message : String(error) },
+      {
+        error: "Failed to create checkout session",
+        details: error instanceof Error ? error.message : "Unknown error",
+        fullError: error,
+      },
       { status: 500 },
     )
   }

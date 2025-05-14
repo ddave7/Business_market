@@ -45,8 +45,6 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  // Disable static generation for problematic routes
-  output: "standalone",
 }
 
 module.exports = nextConfig
