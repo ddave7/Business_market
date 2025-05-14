@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import DollarTransferAnimation from "../components/DollarTransferAnimation"
 import { loadStripe } from "@stripe/stripe-js"
+import Link from "next/link"
 
 // Initialize Stripe with better error handling
 const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
@@ -24,6 +25,7 @@ export default function CheckoutPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [errorDetails, setErrorDetails] = useState<any>(null)
+  const [stripeKeyValid, setStripeKeyValid] = useState<boolean | null>(null)
 
   // Check for canceled parameter
   const canceled = searchParams.get("canceled")
@@ -44,6 +46,23 @@ export default function CheckoutPage() {
     if (canceled) {
       setError("Payment was canceled. Please try again.")
     }
+
+    // Check if Stripe keys are valid
+    const checkStripeKeys = async () => {
+      try {
+        const response = await fetch("/api/test-stripe-connection")
+        const data = await response.json()
+        setStripeKeyValid(data.success)
+        if (!data.success) {
+          console.error("Stripe keys are invalid:", data)
+        }
+      } catch (err) {
+        console.error("Error checking Stripe keys:", err)
+        setStripeKeyValid(false)
+      }
+    }
+
+    checkStripeKeys()
   }, [cart, router, canceled])
 
   const handleCheckout = async () => {
@@ -145,6 +164,25 @@ export default function CheckoutPage() {
         </div>
       )}
 
+      {stripeKeyValid === false && (
+        <Alert className="mb-6 bg-yellow-50 border-yellow-200">
+          <AlertDescription className="text-yellow-800">
+            <p className="font-medium">Stripe API keys are not properly configured.</p>
+            <p className="mt-2">
+              You can use our{" "}
+              <Link href="/checkout/simple-checkout" className="text-blue-600 underline">
+                test checkout
+              </Link>{" "}
+              instead, or{" "}
+              <Link href="/admin/stripe-setup" className="text-blue-600 underline">
+                set up your Stripe keys
+              </Link>
+              .
+            </p>
+          </AlertDescription>
+        </Alert>
+      )}
+
       <div className="grid md:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
@@ -204,16 +242,28 @@ export default function CheckoutPage() {
               )}
             </div>
 
-            <Button onClick={handleCheckout} disabled={isLoading || !publishableKey} className="w-full">
-              {isLoading ? (
-                <div className="flex items-center">
-                  <DollarTransferAnimation size="small" dollarsCount={1} speed="fast" />
-                  <span className="ml-2">Processing...</span>
-                </div>
-              ) : (
-                "Proceed to Payment"
+            <div className="space-y-4">
+              <Button
+                onClick={handleCheckout}
+                disabled={isLoading || !publishableKey || stripeKeyValid === false}
+                className="w-full"
+              >
+                {isLoading ? (
+                  <div className="flex items-center">
+                    <DollarTransferAnimation size="small" dollarsCount={1} speed="fast" />
+                    <span className="ml-2">Processing...</span>
+                  </div>
+                ) : (
+                  "Proceed to Payment"
+                )}
+              </Button>
+
+              {stripeKeyValid === false && (
+                <Button onClick={() => router.push("/checkout/simple-checkout")} variant="outline" className="w-full">
+                  Use Test Checkout Instead
+                </Button>
               )}
-            </Button>
+            </div>
           </CardContent>
         </Card>
       </div>
