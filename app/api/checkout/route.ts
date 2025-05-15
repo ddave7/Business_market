@@ -3,15 +3,21 @@ import { connectDB } from "@/lib/mongodb"
 import { getUserFromToken } from "@/lib/auth"
 import { getStripeInstance } from "@/lib/stripe"
 
-// Helper function to check if a URL is a data URL or too long
-function isValidImageUrl(url: string): boolean {
+// Helper function to validate if a URL is suitable for Stripe
+function isValidStripeImageUrl(url: string): boolean {
   if (!url) return false
 
   // Check if it's a data URL (starts with data:)
   if (url.startsWith("data:")) return false
 
+  // Check if it's a relative URL (doesn't start with http:// or https://)
+  if (!url.startsWith("http://") && !url.startsWith("https://")) return false
+
   // Check if URL is too long for Stripe (limit is 2048 characters)
   if (url.length > 2000) return false
+
+  // Check for common placeholder patterns
+  if (url.includes("placeholder") || url.includes("default")) return false
 
   return true
 }
@@ -84,18 +90,22 @@ export async function POST(req: Request) {
       )
     }
 
-    // Create line items for Stripe with simplified approach
+    // Create line items for Stripe with improved image URL handling
     const lineItems = items.map((item) => {
+      // Basic product data without images
+      const productData = {
+        name: item.name || "Product",
+      }
+
+      // Only add images if they are valid for Stripe
+      if (item.imageUrl && isValidStripeImageUrl(item.imageUrl)) {
+        productData.images = [item.imageUrl]
+      }
+
       return {
         price_data: {
           currency: "usd",
-          product_data: {
-            name: item.name || "Product",
-            // Only add images if they exist and are valid URLs
-            ...(item.imageUrl && !item.imageUrl.startsWith("data:") && item.imageUrl.length < 2000
-              ? { images: [item.imageUrl] }
-              : {}),
-          },
+          product_data: productData,
           unit_amount: Math.round((item.price || 0) * 100), // Convert to cents
         },
         quantity: item.quantity || 1,

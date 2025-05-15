@@ -1,148 +1,194 @@
 "use client"
 
-import type React from "react"
-
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { useCart } from "@/app/contexts/CartContext"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { useCart } from "@/app/contexts/CartContext"
 
 export default function SimpleCheckoutPage() {
-  const { cart, getCartTotal, clearCart } = useCart()
   const router = useRouter()
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const { cart, clearCart } = useCart()
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [formData, setFormData] = useState({
+    cardNumber: "",
+    cardExpiry: "",
+    cardCvc: "",
+    name: "",
+    email: "",
+    address: "",
+  })
 
-  // Calculate order totals
-  const subtotal = getCartTotal()
-  const tax = subtotal * 0.08 // 8% tax
-  const shipping = subtotal > 100 ? 0 : 10 // Free shipping over $100
+  // Calculate totals
+  const subtotal = cart.reduce((total, item) => total + item.price * item.quantity, 0)
+  const tax = subtotal * 0.08
+  const shipping = 5.99
   const total = subtotal + tax + shipping
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      // Simulate processing time
-      await new Promise((resolve) => setTimeout(resolve, 1500))
-
-      // Clear cart and redirect to success page
-      clearCart()
-      router.push("/checkout/success?test=true")
-    } catch (err) {
-      setError("An error occurred during checkout. Please try again.")
-      console.error(err)
-    } finally {
-      setIsLoading(false)
-    }
+  const handleChange = (e) => {
+    const { name, value } = e.target
+    setFormData((prev) => ({ ...prev, [name]: value }))
   }
 
-  if (cart.length === 0) {
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <Alert>
-          <AlertDescription>Your cart is empty. Please add some items before checking out.</AlertDescription>
-        </Alert>
-        <div className="mt-4">
-          <Button onClick={() => router.push("/products")}>Browse Products</Button>
-        </div>
-      </div>
-    )
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setIsProcessing(true)
+
+    // Simulate payment processing
+    await new Promise((resolve) => setTimeout(resolve, 2000))
+
+    // Create a test order reference
+    const orderRef = `TEST-${Date.now()}`
+
+    // Clear the cart
+    clearCart()
+
+    // Redirect to success page
+    router.push(`/checkout/success?test_order=${orderRef}`)
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold mb-6">Simple Checkout (Test Mode)</h1>
-
-      {error && (
-        <Alert variant="destructive" className="mb-6">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
+    <div className="container mx-auto py-10">
+      <h1 className="text-3xl font-bold mb-6">Simple Test Checkout</h1>
+      <p className="text-gray-500 mb-6">
+        This is a test checkout page that doesn't require Stripe. Use it to test your checkout flow.
+      </p>
 
       <div className="grid md:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Order Summary</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {cart.map((item) => (
-                <div key={item._id || item.name} className="flex justify-between py-2 border-b">
-                  <div>
-                    <p className="font-medium">{item.name}</p>
-                    <p className="text-sm text-muted-foreground">Quantity: {item.quantity}</p>
+        <div>
+          <Card>
+            <CardHeader>
+              <CardTitle>Order Summary</CardTitle>
+              <CardDescription>Review your order details</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {cart.map((item) => (
+                  <div key={item._id} className="flex justify-between">
+                    <div>
+                      <p className="font-medium">{item.name}</p>
+                      <p className="text-sm text-gray-500">Qty: {item.quantity}</p>
+                    </div>
+                    <p>${(item.price * item.quantity).toFixed(2)}</p>
                   </div>
-                  <p className="font-medium">${((item.price || 0) * (item.quantity || 1)).toFixed(2)}</p>
-                </div>
-              ))}
+                ))}
 
-              <div className="pt-2">
-                <div className="flex justify-between">
-                  <span>Subtotal</span>
-                  <span>${subtotal.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Tax (8%)</span>
-                  <span>${tax.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Shipping</span>
-                  <span>{shipping === 0 ? "Free" : `$${shipping.toFixed(2)}`}</span>
-                </div>
-                <div className="flex justify-between font-bold mt-2 pt-2 border-t">
-                  <span>Total</span>
-                  <span>${total.toFixed(2)}</span>
+                <div className="border-t pt-4">
+                  <div className="flex justify-between">
+                    <p>Subtotal</p>
+                    <p>${subtotal.toFixed(2)}</p>
+                  </div>
+                  <div className="flex justify-between">
+                    <p>Tax</p>
+                    <p>${tax.toFixed(2)}</p>
+                  </div>
+                  <div className="flex justify-between">
+                    <p>Shipping</p>
+                    <p>${shipping.toFixed(2)}</p>
+                  </div>
+                  <div className="flex justify-between font-bold mt-2">
+                    <p>Total</p>
+                    <p>${total.toFixed(2)}</p>
+                  </div>
                 </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Payment Information (Test Mode)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Name on Card</Label>
-                <Input id="name" placeholder="John Doe" required />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="card">Card Number</Label>
-                <Input id="card" placeholder="4242 4242 4242 4242" required />
-                <p className="text-xs text-gray-500">This is a test mode. Any card number will work.</p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Card>
+            <CardHeader>
+              <CardTitle>Payment Information</CardTitle>
+              <CardDescription>Enter your payment details (test only)</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="expiry">Expiry Date</Label>
-                  <Input id="expiry" placeholder="MM/YY" required />
+                  <Label htmlFor="name">Name on Card</Label>
+                  <Input
+                    id="name"
+                    name="name"
+                    placeholder="John Doe"
+                    required
+                    value={formData.name}
+                    onChange={handleChange}
+                  />
                 </div>
+
                 <div className="space-y-2">
-                  <Label htmlFor="cvc">CVC</Label>
-                  <Input id="cvc" placeholder="123" required />
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    name="email"
+                    type="email"
+                    placeholder="john@example.com"
+                    required
+                    value={formData.email}
+                    onChange={handleChange}
+                  />
                 </div>
-              </div>
 
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? "Processing..." : `Pay $${total.toFixed(2)}`}
-              </Button>
+                <div className="space-y-2">
+                  <Label htmlFor="address">Shipping Address</Label>
+                  <Input
+                    id="address"
+                    name="address"
+                    placeholder="123 Main St, City, Country"
+                    required
+                    value={formData.address}
+                    onChange={handleChange}
+                  />
+                </div>
 
-              <p className="text-center text-sm text-gray-500">
-                This is a test checkout. No actual payment will be processed.
-              </p>
-            </form>
-          </CardContent>
-        </Card>
+                <div className="space-y-2">
+                  <Label htmlFor="cardNumber">Card Number</Label>
+                  <Input
+                    id="cardNumber"
+                    name="cardNumber"
+                    placeholder="4242 4242 4242 4242"
+                    required
+                    value={formData.cardNumber}
+                    onChange={handleChange}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="cardExpiry">Expiry Date</Label>
+                    <Input
+                      id="cardExpiry"
+                      name="cardExpiry"
+                      placeholder="MM/YY"
+                      required
+                      value={formData.cardExpiry}
+                      onChange={handleChange}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="cardCvc">CVC</Label>
+                    <Input
+                      id="cardCvc"
+                      name="cardCvc"
+                      placeholder="123"
+                      required
+                      value={formData.cardCvc}
+                      onChange={handleChange}
+                    />
+                  </div>
+                </div>
+
+                <CardFooter className="px-0 pt-4">
+                  <Button type="submit" className="w-full" disabled={isProcessing}>
+                    {isProcessing ? "Processing..." : `Pay $${total.toFixed(2)}`}
+                  </Button>
+                </CardFooter>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   )
