@@ -2,17 +2,22 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { useCart } from "@/app/contexts/CartContext"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 
+// Prevent this page from being prerendered
+export const dynamic = "force-dynamic"
+
 export default function SimpleCheckoutPage() {
   const router = useRouter()
-  const { cartItems, clearCart, calculateTotal } = useCart()
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [cart, setCart] = useState(() => {
+    // Initialize with empty cart - will be populated client-side
+    return []
+  })
 
   // Form state
   const [formData, setFormData] = useState({
@@ -46,8 +51,10 @@ export default function SimpleCheckoutPage() {
       // Simulate processing delay
       await new Promise((resolve) => setTimeout(resolve, 1500))
 
-      // Clear cart
-      clearCart()
+      // Clear cart (we'll handle this client-side)
+      if (typeof window !== "undefined") {
+        localStorage.setItem("cart", JSON.stringify([]))
+      }
 
       // Redirect to success page
       router.push(`/checkout/success?test_order=${orderId}`)
@@ -57,21 +64,25 @@ export default function SimpleCheckoutPage() {
     }
   }
 
+  // Client-side effect to load cart data
+  useState(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const savedCart = localStorage.getItem("cart")
+        if (savedCart) {
+          setCart(JSON.parse(savedCart))
+        }
+      } catch (error) {
+        console.error("Error loading cart:", error)
+      }
+    }
+  })
+
   // Calculate totals
-  const subtotal = calculateTotal()
+  const subtotal = cart.reduce((total, item) => total + (item.price || 0) * (item.quantity || 1), 0)
   const shipping = 5.99
   const tax = subtotal * 0.08
   const total = subtotal + shipping + tax
-
-  if (cartItems.length === 0) {
-    return (
-      <div className="container mx-auto px-4 py-8 text-center">
-        <h1 className="text-2xl font-bold mb-4">Your cart is empty</h1>
-        <p className="mb-4">Add some products to your cart before proceeding to checkout.</p>
-        <Button onClick={() => router.push("/products")}>Browse Products</Button>
-      </div>
-    )
-  }
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -89,15 +100,19 @@ export default function SimpleCheckoutPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {cartItems.map((item) => (
-                  <div key={item.id} className="flex justify-between">
-                    <div>
-                      <p className="font-medium">{item.name}</p>
-                      <p className="text-sm text-muted-foreground">Qty: {item.quantity}</p>
+                {cart.length === 0 ? (
+                  <p>Your cart is empty. Add some products before checkout.</p>
+                ) : (
+                  cart.map((item, index) => (
+                    <div key={index} className="flex justify-between">
+                      <div>
+                        <p className="font-medium">{item.name}</p>
+                        <p className="text-sm text-muted-foreground">Qty: {item.quantity}</p>
+                      </div>
+                      <p>${((item.price || 0) * (item.quantity || 1)).toFixed(2)}</p>
                     </div>
-                    <p>${(item.price * item.quantity).toFixed(2)}</p>
-                  </div>
-                ))}
+                  ))
+                )}
 
                 <Separator />
 
