@@ -22,15 +22,17 @@ export function getStripeInstance() {
   })
 }
 
-// Export a default instance for backward compatibility
-const stripe = stripeSecretKey
+// Create a Stripe instance
+const stripeInstance = stripeSecretKey
   ? new Stripe(stripeSecretKey, {
       apiVersion: "2023-10-16",
       timeout: 30000,
     })
   : null
 
-export default stripe
+// Export as both default and named export to maintain compatibility
+export default stripeInstance
+export const stripe = stripeInstance
 
 export async function createPaymentIntent(amount: number, currency = "usd", metadata: any = {}) {
   try {
