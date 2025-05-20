@@ -11,8 +11,8 @@ export async function POST(req: Request) {
     const { businessName, email, password, description } = await req.json()
     console.log("Received registration data:", { businessName, email, description })
 
-    // Check if user exists - case insensitive email check
-    const userExists = await User.findOne({ email: { $regex: new RegExp(`^${email}$`, "i") } })
+    // Check if user exists
+    const userExists = await User.findOne({ email })
     console.log("User exists check:", userExists ? "Yes" : "No")
 
     if (userExists) {
@@ -25,7 +25,7 @@ export async function POST(req: Request) {
       const user = await User.create({
         businessName,
         password,
-        email: email.toLowerCase(), // Store email in lowercase
+        email,
         description,
       })
       console.log("User created successfully:", user._id)

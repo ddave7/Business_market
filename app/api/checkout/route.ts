@@ -1,150 +1,156 @@
 import { NextResponse } from "next/server"
 import { connectDB } from "@/lib/mongodb"
 import { getUserFromToken } from "@/lib/auth"
-import { stripe } from "@/lib/stripe"
-import Product from "@/models/Product"
+import { getStripeInstance } from "@/lib/stripe"
 
-// Helper function to validate if a URL is absolute and publicly accessible
-function isValidImageUrl(url: string): boolean {
-  // Check if it's a valid absolute URL
+// Helper function to validate if a URL is suitable for Stripe
+function isValidStripeImageUrl(url: string): boolean {
   if (!url) return false
 
-  // Skip data URLs and relative URLs
-  if (url.startsWith("data:") || url.startsWith("/")) return false
+  // Check if it's a data URL (starts with data:)
+  if (url.startsWith("data:")) return false
 
-  // Check if it's a valid URL format
-  try {
-    new URL(url)
-    return true
-  } catch (e) {
-    return false
-  }
-}
+  // Check if it's a relative URL (doesn't start with http:// or https://)
+  if (!url.startsWith("http://") && !url.startsWith("https://")) return false
 
-// Helper function to get absolute URL
-function getAbsoluteUrl(url: string): string {
-  if (!url) return ""
+  // Check if URL is too long for Stripe (limit is 2048 characters)
+  if (url.length > 2000) return false
 
-  // If it's already an absolute URL, return it
-  if (url.startsWith("http://") || url.startsWith("https://")) {
-    return url
-  }
+  // Check for common placeholder patterns
+  if (url.includes("placeholder") || url.includes("default")) return false
 
-  // If it's a relative URL, make it absolute
-  if (url.startsWith("/")) {
-    const baseUrl =
-      process.env.NEXT_PUBLIC_API_URL ||
-      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000")
-    return `${baseUrl}${url}`
-  }
-
-  // If it's not a valid URL, return empty string
-  return ""
+  return true
 }
 
 export async function POST(req: Request) {
-  console.log("Checkout API: Starting checkout session creation")
+  console.log("Checkout API: Starting checkout process")
 
   try {
     // Connect to database
-    await connectDB()
-    console.log("Checkout API: Connected to database")
-
-    // Get user from token
-    const user = await getUserFromToken(req)
-    if (!user) {
-      console.log("Checkout API: No authenticated user found")
-      return NextResponse.json({ error: "Authentication required" }, { status: 401 })
-    }
-    console.log("Checkout API: User authenticated:", user._id)
-
-    // Get cart items from request
-    const { cartItems, shippingDetails } = await req.json()
-    console.log("Checkout API: Received cart items:", cartItems.length)
-
-    if (!cartItems || cartItems.length === 0) {
-      console.log("Checkout API: No cart items provided")
-      return NextResponse.json({ error: "No items in cart" }, { status: 400 })
+    try {
+      await connectDB()
+      console.log("Checkout API: Connected to database")
+    } catch (dbError) {
+      console.error("Checkout API: Database connection error:", dbError)
+      return NextResponse.json(
+        {
+          error: "Failed to connect to database",
+          details: dbError instanceof Error ? dbError.message : String(dbError),
+        },
+        { status: 500 },
+      )
     }
 
-    // Fetch product details from database to verify prices
-    const productIds = cartItems.map((item) => item.id)
-    const products = await Product.find({ _id: { $in: productIds } })
-    console.log("Checkout API: Fetched products from database:", products.length)
-
-    if (products.length !== productIds.length) {
-      console.log("Checkout API: Some products not found")
-      return NextResponse.json({ error: "Some products not found" }, { status: 400 })
+    // Parse request body first to get the data
+    let requestData
+    try {
+      requestData = await req.json()
+      console.log("Checkout API: Received data with", requestData.items?.length || 0, "items")
+    } catch (parseError) {
+      console.error("Checkout API: Error parsing request body:", parseError)
+      return NextResponse.json(
+        {
+          error: "Invalid request format",
+          details: parseError instanceof Error ? parseError.message : String(parseError),
+        },
+        { status: 400 },
+      )
     }
 
-    // Create line items for Stripe
-    const lineItems = cartItems.map((item) => {
-      const product = products.find((p) => p._id.toString() === item.id)
+    const { items, subtotal, tax, shipping, total } = requestData
 
-      if (!product) {
-        throw new Error(`Product not found: ${item.id}`)
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      console.error("Checkout API: Invalid cart items:", items)
+      return NextResponse.json({ error: "Invalid cart items" }, { status: 400 })
+    }
+
+    // Get user from token (optional - will create guest checkout if not authenticated)
+    let user
+    try {
+      user = await getUserFromToken(req)
+      console.log("Checkout API: User authentication check:", user ? "Authenticated as " + user._id : "Guest checkout")
+    } catch (authError) {
+      console.log("Checkout API: Authentication error, proceeding as guest:", authError)
+      // Continue as guest checkout
+    }
+
+    // Get Stripe instance
+    let stripe
+    try {
+      stripe = getStripeInstance()
+      console.log("Checkout API: Stripe instance created successfully")
+    } catch (stripeError) {
+      console.error("Checkout API: Error creating Stripe instance:", stripeError)
+      return NextResponse.json(
+        {
+          error: "Stripe configuration error",
+          details: stripeError instanceof Error ? stripeError.message : String(stripeError),
+        },
+        { status: 500 },
+      )
+    }
+
+    // Create line items for Stripe with improved image URL handling
+    const lineItems = items.map((item) => {
+      // Basic product data without images
+      const productData = {
+        name: item.name || "Product",
       }
 
-      // Process image URL for Stripe
-      const imageUrls = []
-      if (product.imageUrl && product.imageUrl !== "/placeholder.svg") {
-        const absoluteUrl = getAbsoluteUrl(product.imageUrl)
-        if (isValidImageUrl(absoluteUrl)) {
-          imageUrls.push(absoluteUrl)
-        }
+      // Only add images if they are valid for Stripe
+      if (item.imageUrl && isValidStripeImageUrl(item.imageUrl)) {
+        productData.images = [item.imageUrl]
       }
 
       return {
         price_data: {
           currency: "usd",
-          product_data: {
-            name: product.name,
-            description: product.description.substring(0, 255),
-            images: imageUrls.length > 0 ? imageUrls : undefined,
-          },
-          unit_amount: Math.round(product.price * 100), // Convert to cents
+          product_data: productData,
+          unit_amount: Math.round((item.price || 0) * 100), // Convert to cents
         },
-        quantity: item.quantity,
+        quantity: item.quantity || 1,
       }
     })
 
-    console.log("Checkout API: Created line items for Stripe")
+    console.log("Checkout API: Prepared line items:", JSON.stringify(lineItems.slice(0, 1)))
 
     // Create Stripe checkout session
     try {
-      console.log("Checkout API: Creating Stripe checkout session")
+      const origin = req.headers.get("origin") || process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"
+      console.log("Checkout API: Using origin for redirect:", origin)
 
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ["card"],
         line_items: lineItems,
         mode: "payment",
-        success_url: `${process.env.NEXT_PUBLIC_API_URL || process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000"}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${process.env.NEXT_PUBLIC_API_URL || process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000"}/checkout`,
-        customer_email: user.email,
-        client_reference_id: user._id.toString(),
-        shipping_address_collection: {
-          allowed_countries: ["US", "CA", "GB", "AU"],
-        },
+        success_url: `${origin}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${origin}/checkout?canceled=true`,
         metadata: {
-          userId: user._id.toString(),
-          shippingName: shippingDetails?.name || "",
-          shippingAddress: shippingDetails?.address || "",
-          shippingCity: shippingDetails?.city || "",
-          shippingState: shippingDetails?.state || "",
-          shippingZip: shippingDetails?.zip || "",
-          shippingCountry: shippingDetails?.country || "",
+          userId: user ? user._id.toString() : "guest",
+          orderReference: `order_ref_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`,
         },
+        shipping_options: [
+          {
+            shipping_rate_data: {
+              type: "fixed_amount",
+              fixed_amount: {
+                amount: Math.round((shipping || 0) * 100),
+                currency: "usd",
+              },
+              display_name: shipping === 0 ? "Free shipping" : "Standard shipping",
+            },
+          },
+        ],
       })
 
-      console.log("Checkout API: Stripe session created successfully:", session.id)
-
-      return NextResponse.json({ sessionId: session.id, url: session.url })
+      console.log("Checkout API: Created Stripe session:", session.id)
+      return NextResponse.json({ sessionId: session.id })
     } catch (stripeError) {
       console.error("Checkout API: Stripe error:", stripeError)
       return NextResponse.json(
         {
           error: "Error creating checkout session",
-          details: stripeError.message,
+          details: stripeError instanceof Error ? stripeError.message : String(stripeError),
           stripeError: JSON.stringify(stripeError),
         },
         { status: 500 },
@@ -153,10 +159,7 @@ export async function POST(req: Request) {
   } catch (error) {
     console.error("Checkout API: Unexpected error:", error)
     return NextResponse.json(
-      {
-        error: "Error creating checkout session",
-        details: error instanceof Error ? error.message : "Unknown error",
-      },
+      { error: "Unexpected error", details: error instanceof Error ? error.message : String(error) },
       { status: 500 },
     )
   }

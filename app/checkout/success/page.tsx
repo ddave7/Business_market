@@ -1,81 +1,95 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useSearchParams, useRouter } from "next/navigation"
+import { useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { CheckCircle } from "lucide-react"
-import LoadingOverlay from "@/app/components/LoadingOverlay"
+import Link from "next/link"
+import { useCart } from "@/app/contexts/CartContext"
 
-export default function SuccessPage() {
+export default function CheckoutSuccessPage() {
   const searchParams = useSearchParams()
-  const router = useRouter()
-  const [loading, setLoading] = useState(true)
-  const [order, setOrder] = useState(null)
-  const [error, setError] = useState("")
-
   const sessionId = searchParams.get("session_id")
-  const testOrderId = searchParams.get("test_order")
+  const testOrder = searchParams.get("test_order")
+  const { clearCart } = useCart()
+  const [orderDetails, setOrderDetails] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
-    async function fetchOrderDetails() {
+    // Clear the cart on successful checkout
+    clearCart()
+
+    // If this is a test order, create mock order details
+    if (testOrder) {
+      setOrderDetails({
+        id: testOrder,
+        amount: "Test Order",
+        status: "success",
+        isTestOrder: true,
+      })
+      setLoading(false)
+      return
+    }
+
+    // Otherwise, verify the real Stripe session
+    if (!sessionId) {
+      setError("No session ID provided")
+      setLoading(false)
+      return
+    }
+
+    async function verifySession() {
       try {
-        setLoading(true)
-
-        // Handle test orders
-        if (testOrderId) {
-          setOrder({
-            id: testOrderId,
-            isTestOrder: true,
-            total: 0,
-            items: [],
-            createdAt: new Date().toISOString(),
-          })
-          setLoading(false)
-          return
-        }
-
-        // Handle real Stripe orders
-        if (!sessionId) {
-          setError("No session ID provided")
-          setLoading(false)
-          return
-        }
-
         const response = await fetch(`/api/checkout/verify?session_id=${sessionId}`)
-        const data = await response.json()
 
         if (!response.ok) {
-          throw new Error(data.error || "Failed to verify checkout session")
+          throw new Error("Failed to verify checkout session")
         }
 
-        setOrder(data.order)
-      } catch (error) {
-        console.error("Error fetching order details:", error)
-        setError(error.message || "Failed to load order details")
+        const data = await response.json()
+        setOrderDetails(data)
+      } catch (err) {
+        setError(err.message || "An error occurred")
       } finally {
         setLoading(false)
       }
     }
 
-    fetchOrderDetails()
-  }, [sessionId, testOrderId])
+    verifySession()
+  }, [sessionId, testOrder, clearCart])
 
   if (loading) {
-    return <LoadingOverlay isLoading={true} message="Processing your order..." />
+    return (
+      <div className="container mx-auto py-10 flex justify-center">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <CardTitle>Processing Your Order</CardTitle>
+            <CardDescription>Please wait while we confirm your payment...</CardDescription>
+          </CardHeader>
+          <CardContent className="flex justify-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   if (error) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <Card className="max-w-md mx-auto">
-          <CardHeader>
-            <CardTitle className="text-red-500">Error</CardTitle>
-            <CardDescription>There was a problem processing your order</CardDescription>
+      <div className="container mx-auto py-10 flex justify-center">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <CardTitle className="text-red-600">Checkout Error</CardTitle>
+            <CardDescription>We encountered a problem with your order</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="mb-4">{error}</p>
-            <Button onClick={() => router.push("/checkout")}>Return to Checkout</Button>
+            <p className="text-center mb-4">{error}</p>
+            <div className="flex justify-center">
+              <Link href="/checkout">
+                <Button>Try Again</Button>
+              </Link>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -83,42 +97,53 @@ export default function SuccessPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <Card className="max-w-md mx-auto">
+    <div className="container mx-auto py-10 flex justify-center">
+      <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="flex justify-center mb-4">
-            <CheckCircle className="h-16 w-16 text-green-500" />
+          <div className="mx-auto mb-4 bg-green-100 rounded-full p-3 w-16 h-16 flex items-center justify-center">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-8 w-8 text-green-600"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
           </div>
           <CardTitle className="text-2xl">Order Confirmed!</CardTitle>
           <CardDescription>
-            {order?.isTestOrder
-              ? "This is a test order - no payment was processed"
-              : "Your payment was processed successfully"}
+            {orderDetails?.isTestOrder
+              ? "Your test order has been processed successfully"
+              : "Your payment has been processed successfully"}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="text-center">
-            <p className="text-muted-foreground">Order Reference</p>
-            <p className="font-medium">{order?.id || testOrderId}</p>
+          <div className="border rounded-lg p-4">
+            <p className="text-sm text-gray-500">Order Reference</p>
+            <p className="font-medium">{orderDetails?.id || "N/A"}</p>
           </div>
 
-          {order?.isTestOrder ? (
-            <p className="text-center text-sm text-muted-foreground">
-              This was a test order created using the simple checkout. In a real order, you would see your order details
-              here.
-            </p>
-          ) : (
-            <div className="text-center">
-              <p className="text-muted-foreground">Total Amount</p>
-              <p className="font-medium">${order?.total?.toFixed(2) || "0.00"}</p>
+          {!orderDetails?.isTestOrder && (
+            <div className="border rounded-lg p-4">
+              <p className="text-sm text-gray-500">Amount Paid</p>
+              <p className="font-medium">${orderDetails?.amount || "N/A"}</p>
             </div>
           )}
 
-          <div className="flex justify-center gap-4 pt-4">
-            <Button onClick={() => router.push("/orders")}>View Orders</Button>
-            <Button variant="outline" onClick={() => router.push("/products")}>
-              Continue Shopping
-            </Button>
+          {orderDetails?.isTestOrder && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <p className="text-sm text-yellow-700">This is a test order. No actual payment was processed.</p>
+            </div>
+          )}
+
+          <div className="flex justify-center space-x-4 pt-4">
+            <Link href="/products">
+              <Button variant="outline">Continue Shopping</Button>
+            </Link>
+            <Link href="/orders">
+              <Button>View Orders</Button>
+            </Link>
           </div>
         </CardContent>
       </Card>
