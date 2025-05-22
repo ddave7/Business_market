@@ -32,14 +32,6 @@ const productSchema = new mongoose.Schema({
     default: "/placeholder.svg",
     // Allow for longer URLs to accommodate data URLs
     maxlength: [1000000, "Image URL is too long"],
-    // Add a setter to ensure URLs are properly formatted
-    set: (url: string) => {
-      // If it's a relative URL starting with /, make it absolute using the API URL
-      if (url && url.startsWith("/") && process.env.NEXT_PUBLIC_API_URL) {
-        return `${process.env.NEXT_PUBLIC_API_URL}${url}`
-      }
-      return url
-    },
   },
   business: {
     type: mongoose.Schema.Types.ObjectId,

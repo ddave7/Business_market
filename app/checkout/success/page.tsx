@@ -1,94 +1,109 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useSearchParams } from "next/navigation"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { CheckCircle2 } from "lucide-react"
 import Link from "next/link"
+import DollarTransferAnimation from "@/app/components/DollarTransferAnimation"
 import { useCart } from "@/app/contexts/CartContext"
 
 export default function CheckoutSuccessPage() {
+  const router = useRouter()
   const searchParams = useSearchParams()
-  const sessionId = searchParams.get("session_id")
-  const testOrder = searchParams.get("test_order")
   const { clearCart } = useCart()
-  const [orderDetails, setOrderDetails] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [errorDetails, setErrorDetails] = useState<any>(null)
+  const [orderId, setOrderId] = useState<string | null>(null)
 
   useEffect(() => {
-    // Clear the cart on successful checkout
-    clearCart()
+    const sessionId = searchParams.get("session_id")
 
-    // If this is a test order, create mock order details
-    if (testOrder) {
-      setOrderDetails({
-        id: testOrder,
-        amount: "Test Order",
-        status: "success",
-        isTestOrder: true,
-      })
-      setLoading(false)
-      return
-    }
-
-    // Otherwise, verify the real Stripe session
     if (!sessionId) {
-      setError("No session ID provided")
-      setLoading(false)
+      setError("No payment information found")
+      setIsLoading(false)
       return
     }
 
     async function verifySession() {
       try {
+        console.log("Verifying session:", sessionId)
+
+        // Check if an order already exists for this session ID to prevent duplicates
+        const checkResponse = await fetch(`/api/checkout/check-existing?session_id=${sessionId}`)
+        const checkData = await checkResponse.json()
+
+        if (checkData.exists) {
+          console.log("Order already exists for this session, using existing order")
+          setOrderId(checkData.orderId)
+          // Clear the cart after successful payment
+          clearCart()
+          setIsLoading(false)
+          return
+        }
+
+        // Verify the session with your backend
         const response = await fetch(`/api/checkout/verify?session_id=${sessionId}`)
 
         if (!response.ok) {
-          throw new Error("Failed to verify checkout session")
+          const errorData = await response.json()
+          console.error("Error verifying payment:", errorData)
+          setErrorDetails(errorData)
+          throw new Error(errorData.error || "Failed to verify payment")
         }
 
         const data = await response.json()
-        setOrderDetails(data)
+        console.log("Payment verification response:", data)
+
+        if (data.orderId) {
+          setOrderId(data.orderId)
+        }
+
+        // Clear the cart after successful payment
+        clearCart()
       } catch (err) {
-        setError(err.message || "An error occurred")
+        console.error("Error verifying session:", err)
+        setError(err.message || "An error occurred while verifying your payment")
       } finally {
-        setLoading(false)
+        setIsLoading(false)
       }
     }
 
     verifySession()
-  }, [sessionId, testOrder, clearCart])
+  }, [searchParams, clearCart])
 
-  if (loading) {
+  if (isLoading) {
     return (
-      <div className="container mx-auto py-10 flex justify-center">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <CardTitle>Processing Your Order</CardTitle>
-            <CardDescription>Please wait while we confirm your payment...</CardDescription>
-          </CardHeader>
-          <CardContent className="flex justify-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
-          </CardContent>
-        </Card>
+      <div className="flex justify-center items-center min-h-[60vh]">
+        <DollarTransferAnimation message="Processing your payment..." />
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="container mx-auto py-10 flex justify-center">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <CardTitle className="text-red-600">Checkout Error</CardTitle>
-            <CardDescription>We encountered a problem with your order</CardDescription>
+      <div className="container mx-auto px-4 py-8">
+        <Card className="max-w-md mx-auto">
+          <CardHeader>
+            <CardTitle className="text-red-500">Payment Error</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-center mb-4">{error}</p>
-            <div className="flex justify-center">
-              <Link href="/checkout">
-                <Button>Try Again</Button>
-              </Link>
+            <Alert variant="destructive" className="mb-4">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+
+            {errorDetails && (
+              <div className="mb-4 p-4 bg-gray-100 rounded-md">
+                <h3 className="font-bold mb-2">Error Details:</h3>
+                <pre className="text-xs overflow-auto max-h-40">{JSON.stringify(errorDetails, null, 2)}</pre>
+              </div>
+            )}
+
+            <div className="flex justify-center mt-4">
+              <Button onClick={() => router.push("/checkout")}>Try Again</Button>
             </div>
           </CardContent>
         </Card>
@@ -97,52 +112,28 @@ export default function CheckoutSuccessPage() {
   }
 
   return (
-    <div className="container mx-auto py-10 flex justify-center">
-      <Card className="w-full max-w-md">
+    <div className="container mx-auto px-4 py-8">
+      <Card className="max-w-md mx-auto">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-4 bg-green-100 rounded-full p-3 w-16 h-16 flex items-center justify-center">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-8 w-8 text-green-600"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-          </div>
-          <CardTitle className="text-2xl">Order Confirmed!</CardTitle>
-          <CardDescription>
-            {orderDetails?.isTestOrder
-              ? "Your test order has been processed successfully"
-              : "Your payment has been processed successfully"}
-          </CardDescription>
+          <CheckCircle2 className="mx-auto h-16 w-16 text-green-500 mb-4" />
+          <CardTitle>Payment Successful!</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="border rounded-lg p-4">
-            <p className="text-sm text-gray-500">Order Reference</p>
-            <p className="font-medium">{orderDetails?.id || "N/A"}</p>
-          </div>
-
-          {!orderDetails?.isTestOrder && (
-            <div className="border rounded-lg p-4">
-              <p className="text-sm text-gray-500">Amount Paid</p>
-              <p className="font-medium">${orderDetails?.amount || "N/A"}</p>
-            </div>
-          )}
-
-          {orderDetails?.isTestOrder && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-              <p className="text-sm text-yellow-700">This is a test order. No actual payment was processed.</p>
-            </div>
-          )}
-
-          <div className="flex justify-center space-x-4 pt-4">
+        <CardContent className="text-center">
+          <p className="mb-6">Thank you for your purchase. Your order has been received and is being processed.</p>
+          <div className="flex flex-col space-y-2">
+            {orderId ? (
+              <Link href={`/orders/${orderId}`}>
+                <Button className="w-full">View Order Details</Button>
+              </Link>
+            ) : (
+              <Link href="/orders">
+                <Button className="w-full">View Your Orders</Button>
+              </Link>
+            )}
             <Link href="/products">
-              <Button variant="outline">Continue Shopping</Button>
-            </Link>
-            <Link href="/orders">
-              <Button>View Orders</Button>
+              <Button variant="outline" className="w-full">
+                Continue Shopping
+              </Button>
             </Link>
           </div>
         </CardContent>
