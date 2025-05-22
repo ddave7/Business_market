@@ -25,6 +25,8 @@ export async function connectDB() {
         connectTimeoutMS: 10000,
         socketTimeoutMS: 45000,
         serverSelectionTimeoutMS: 10000,
+        maxPoolSize: 10, // Limit the number of connections
+        maxIdleTimeMS: 60000, // Close idle connections after 60 seconds
       }
 
       console.log("Creating new database connection")
@@ -46,10 +48,14 @@ export async function connectDB() {
 // Add connection event handlers
 mongoose.connection.on("error", (err) => {
   console.error("MongoDB connection error:", err)
+  // Reset the cached promise so we can try to reconnect on the next request
+  if (cached) cached.promise = null
 })
 
 mongoose.connection.on("disconnected", () => {
   console.log("MongoDB disconnected")
+  // Reset the cached promise so we can try to reconnect on the next request
+  if (cached) cached.promise = null
 })
 
 // Gracefully close the connection when the app is shutting down

@@ -39,12 +39,21 @@ export async function getUserFromToken(req: Request) {
       return null
     }
 
-    // Connect to database
-    try {
-      await connectDB()
-    } catch (dbError) {
-      console.error("Database connection error:", dbError)
-      throw new Error("Failed to connect to database")
+    // Connect to database with retry logic
+    let retries = 3
+    while (retries > 0) {
+      try {
+        await connectDB()
+        break // Connection successful, exit the retry loop
+      } catch (dbError) {
+        retries--
+        if (retries === 0) {
+          console.error("Database connection error after retries:", dbError)
+          throw new Error("Failed to connect to database")
+        }
+        console.log(`Database connection failed, retrying... (${retries} attempts left)`)
+        await new Promise((resolve) => setTimeout(resolve, 1000)) // Wait 1 second before retrying
+      }
     }
 
     // Find user - Convert userId to string to ensure it's properly formatted
