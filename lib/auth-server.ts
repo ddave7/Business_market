@@ -6,7 +6,7 @@ import mongoose from "mongoose"
 
 const secretKey = new TextEncoder().encode(process.env.JWT_SECRET || "fallback_secret_key_for_development")
 
-export async function getUserFromToken() {
+export async function getUserFromToken(req?: Request) {
   try {
     // Get token from cookies
     let token

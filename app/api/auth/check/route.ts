@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server"
 import { getUserFromToken } from "@/lib/auth-server"
 
-const secretKey = new TextEncoder().encode(process.env.JWT_SECRET || "fallback_secret_key_for_development")
-
 export const dynamic = "force-dynamic" // Disable caching for this route
 
 export async function GET() {

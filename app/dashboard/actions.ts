@@ -2,48 +2,39 @@
 
 import { connectDB } from "@/lib/mongodb"
 import Product from "@/models/Product"
-import { getUserFromToken } from "@/lib/auth"
-import { cookies } from "next/headers"
+import { getUserFromToken } from "@/lib/auth-server"
+import { revalidatePath } from "next/cache"
 
-export async function getBusinessProducts() {
+export async function deleteProduct(productId: string) {
   try {
-    await connectDB()
-    const cookieStore = cookies()
-    const token = cookieStore.get("auth_token")?.value
-
-    if (!token) {
-      console.error("Dashboard: No auth token found, redirecting to login")
-      return { redirect: true, user: null, products: [] }
-    }
-
-    const user = await getUserFromToken({ headers: { cookie: `auth_token=${token}` } } as Request)
+    const user = await getUserFromToken()
 
     if (!user) {
-      console.error("Dashboard: No user found, redirecting to login")
-      return { redirect: true, user: null, products: [] }
+      return { success: false, error: "Unauthorized" }
     }
 
-    try {
-      const products = await Product.find({ business: user._id }).sort({ createdAt: -1 }).limit(10).lean()
-      console.log("Dashboard: Products fetched:", products.length)
-      return {
-        redirect: false,
-        user,
-        products: JSON.parse(JSON.stringify(products)),
-      }
-    } catch (error) {
-      console.error("Error fetching business products:", error)
-      // Return empty products array instead of throwing
-      return {
-        redirect: false,
-        user,
-        products: [],
-        error: "Failed to fetch products",
-      }
+    await connectDB()
+
+    // Find the product and check if the current user is the seller
+    const product = await Product.findById(productId)
+
+    if (!product) {
+      return { success: false, error: "Product not found" }
     }
+
+    if (product.seller.toString() !== user._id.toString()) {
+      return { success: false, error: "You are not authorized to delete this product" }
+    }
+
+    // Delete the product
+    await Product.findByIdAndDelete(productId)
+
+    // Revalidate the dashboard page
+    revalidatePath("/dashboard")
+
+    return { success: true }
   } catch (error) {
-    console.error("Dashboard: Error in getBusinessProducts:", error)
-    // Return a redirect flag instead of throwing
-    return { redirect: true, user: null, products: [] }
+    console.error("Error deleting product:", error)
+    return { success: false, error: "Failed to delete product" }
   }
 }
