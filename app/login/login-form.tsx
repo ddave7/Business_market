@@ -1,111 +1,90 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
-import Link from "next/link"
+
+import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import LoadingOverlay from "@/app/components/LoadingOverlay"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { loginUser } from "@/lib/auth-client"
 
 export default function LoginForm() {
-  const router = useRouter()
-  const searchParams = useSearchParams()
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
   const [error, setError] = useState("")
-  const [loading, setLoading] = useState(false)
-  const [forceAnimation, setForceAnimation] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const router = useRouter()
 
-  // Get the 'from' parameter safely with useSearchParams
-  const fromPath = searchParams.get("from") || "/dashboard"
-
-  // If forceAnimation is true, show the animation for 3 seconds
-  useEffect(() => {
-    let timer: NodeJS.Timeout
-    if (forceAnimation) {
-      timer = setTimeout(() => {
-        setForceAnimation(false)
-      }, 3000)
-    }
-    return () => {
-      if (timer) clearTimeout(timer)
-    }
-  }, [forceAnimation])
-
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsLoading(true)
     setError("")
-    setLoading(true)
-    setForceAnimation(true)
-
-    const formData = new FormData(event.currentTarget)
-    const email = formData.get("email") as string
-    const password = formData.get("password") as string
 
     try {
-      console.log("Sending login request")
+      const result = await loginUser(email, password)
 
-      const minimumDisplayTime = new Promise((resolve) => setTimeout(resolve, 3000))
-
-      const loginPromise = fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-        credentials: "include",
-      })
-
-      const [res] = await Promise.all([loginPromise, minimumDisplayTime])
-
-      const data = await res.json()
-      console.log("Login response received:", data)
-
-      if (!res.ok) {
-        throw new Error(data.error || "Error logging in")
+      if (result.success) {
+        router.push("/dashboard")
+        router.refresh()
+      } else {
+        setError(result.error || "Login failed")
       }
-
-      console.log("Login successful, redirecting")
-      router.push(fromPath)
-    } catch (error) {
-      console.error("Login error:", error)
-      setError(error instanceof Error ? error.message : "Error logging in")
+    } catch (err) {
+      setError("An unexpected error occurred")
+      console.error(err)
     } finally {
-      setLoading(false)
+      setIsLoading(false)
     }
   }
 
   return (
-    <div className="max-w-md mx-auto">
-      <h1 className="text-2xl font-bold mb-6">Login to Your Account</h1>
-
-      {error && (
-        <Alert variant="destructive" className="mb-4">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
-      <LoadingOverlay isLoading={loading || forceAnimation} message="Logging you in...">
+    <Card className="w-full max-w-md mx-auto">
+      <CardHeader>
+        <CardTitle>Login</CardTitle>
+        <CardDescription>Enter your credentials to access your account</CardDescription>
+      </CardHeader>
+      <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <Label htmlFor="email">Email</Label>
-            <Input id="email" name="email" type="email" required autoComplete="email" />
+          <div className="space-y-2">
+            <label htmlFor="email" className="text-sm font-medium">
+              Email
+            </label>
+            <Input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="your@email.com"
+              required
+            />
           </div>
-          <div>
-            <Label htmlFor="password">Password</Label>
-            <Input id="password" name="password" type="password" required autoComplete="current-password" />
+          <div className="space-y-2">
+            <label htmlFor="password" className="text-sm font-medium">
+              Password
+            </label>
+            <Input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
           </div>
-          <Button type="submit" className="w-full" disabled={loading || forceAnimation}>
-            {loading || forceAnimation ? "Logging in..." : "Login"}
+          {error && <div className="text-red-500 text-sm">{error}</div>}
+          <Button type="submit" className="w-full" disabled={isLoading}>
+            {isLoading ? "Logging in..." : "Login"}
           </Button>
         </form>
-      </LoadingOverlay>
-
-      <p className="mt-4 text-center">
-        Don't have an account?{" "}
-        <Link href="/register" className="text-primary hover:underline">
-          Register here
-        </Link>
-      </p>
-    </div>
+      </CardContent>
+      <CardFooter className="flex justify-center">
+        <p className="text-sm text-gray-500">
+          Don't have an account?{" "}
+          <a href="/register" className="text-blue-500 hover:underline">
+            Register
+          </a>
+        </p>
+      </CardFooter>
+    </Card>
   )
 }

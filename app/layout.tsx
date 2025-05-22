@@ -8,7 +8,8 @@ import GlobalLoading from "./components/GlobalLoading"
 import type React from "react"
 import DollarTransferAnimation from "./components/DollarTransferAnimation"
 import { ThemeProvider } from "@/components/theme-provider"
-import { AuthProvider } from "./contexts/AuthContext"
+// Remove the AuthProvider import as it might be causing the issue
+// import { AuthProvider } from "./contexts/AuthContext"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -27,28 +28,27 @@ export default function RootLayout({
     <html lang="en" className="h-full">
       <body className={`${inter.className} flex flex-col min-h-screen bg-background`}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          <AuthProvider>
-            <CartProvider>
-              <div className="flex flex-col min-h-screen">
-                <Suspense fallback={<div className="h-16 bg-background shadow-md"></div>}>
-                  <Header />
+          {/* Remove the AuthProvider wrapper */}
+          <CartProvider>
+            <div className="flex flex-col min-h-screen">
+              <Suspense fallback={<div className="h-16 bg-background shadow-md"></div>}>
+                <Header />
+              </Suspense>
+              <main className="flex-grow container mx-auto px-4 py-8">
+                <Suspense
+                  fallback={
+                    <div className="flex items-center justify-center min-h-[50vh]">
+                      <DollarTransferAnimation message="Loading..." />
+                    </div>
+                  }
+                >
+                  {children}
                 </Suspense>
-                <main className="flex-grow container mx-auto px-4 py-8">
-                  <Suspense
-                    fallback={
-                      <div className="flex items-center justify-center min-h-[50vh]">
-                        <DollarTransferAnimation message="Loading..." />
-                      </div>
-                    }
-                  >
-                    {children}
-                  </Suspense>
-                </main>
-                <Footer />
-              </div>
-              <GlobalLoading />
-            </CartProvider>
-          </AuthProvider>
+              </main>
+              <Footer />
+            </div>
+            <GlobalLoading />
+          </CartProvider>
         </ThemeProvider>
       </body>
     </html>
