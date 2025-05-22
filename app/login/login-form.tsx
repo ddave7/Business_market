@@ -46,26 +46,33 @@ export default function LoginForm() {
     try {
       console.log("Sending login request")
 
-      const minimumDisplayTime = new Promise((resolve) => setTimeout(resolve, 3000))
+      const minimumDisplayTime = new Promise((resolve) => setTimeout(resolve, 1500))
 
       const loginPromise = fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
         credentials: "include",
+        cache: "no-store",
       })
 
       const [res] = await Promise.all([loginPromise, minimumDisplayTime])
 
-      const data = await res.json()
-      console.log("Login response received:", data)
-
       if (!res.ok) {
+        const data = await res.json()
+        console.error("Login response error:", data)
         throw new Error(data.error || "Error logging in")
       }
 
+      const data = await res.json()
+      console.log("Login response received:", data)
+
+      // Add a small delay before redirecting to ensure cookie is set
+      await new Promise((resolve) => setTimeout(resolve, 500))
+
       console.log("Login successful, redirecting")
       router.push(fromPath)
+      router.refresh()
     } catch (error) {
       console.error("Login error:", error)
       setError(error instanceof Error ? error.message : "Error logging in")
