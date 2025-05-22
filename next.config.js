@@ -45,6 +45,12 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  // Disable static generation for problematic routes
+  generateStaticParams: async () => {
+    return {
+      "/404": { dynamic: "force-dynamic" },
+    }
+  },
 }
 
 module.exports = nextConfig

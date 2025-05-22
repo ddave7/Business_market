@@ -38,7 +38,10 @@ export async function POST(req: Request) {
     // Find user
     let user
     try {
-      user = await User.findOne({ email }).select("+password")
+      // Use case-insensitive email matching
+      user = await User.findOne({
+        email: { $regex: new RegExp(`^${email}$`, "i") },
+      }).select("+password")
       console.log("User lookup result:", user ? "Found" : "Not found")
     } catch (findError) {
       console.error("Error finding user:", findError)
@@ -79,7 +82,7 @@ export async function POST(req: Request) {
       })
         .setProtectedHeader({ alg: "HS256" })
         .setIssuedAt()
-        .setExpirationTime("24h")
+        .setExpirationTime("7d") // Extended to 7 days
         .sign(secretKey)
       console.log("JWT token generated")
     } catch (tokenError) {
@@ -87,25 +90,34 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Error generating authentication token" }, { status: 500 })
     }
 
-    // Create the response
-    const response = NextResponse.json({
-      success: true,
-      user: {
-        _id: userId,
-        businessName: user.businessName,
-        email: user.email,
+    // Create the response with explicit no-cache headers
+    const response = NextResponse.json(
+      {
+        success: true,
+        user: {
+          _id: userId,
+          businessName: user.businessName,
+          email: user.email,
+        },
       },
-    })
+      {
+        headers: {
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+      },
+    )
 
-    // Set cookie
+    // Set cookie with longer expiration
     try {
       response.cookies.set({
         name: "auth_token",
         value: token,
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
-        sameSite: "strict",
-        maxAge: 60 * 60 * 24, // 24 hours
+        sameSite: "lax", // Changed from strict to lax for better compatibility
+        maxAge: 7 * 24 * 60 * 60, // 7 days
         path: "/",
       })
       console.log("Auth cookie set in response")
