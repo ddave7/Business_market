@@ -30,19 +30,25 @@ export default function Home() {
           </Link>
         </div>
       </div>
-      <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-8">
+      <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-8 px-4 max-w-6xl mx-auto">
         <div className="text-center">
-          <Image src="/icon-connect.svg" alt="Connect" width={64} height={64} className="mx-auto mb-4" />
+          <div className="mx-auto mb-4 w-16 h-16 flex items-center justify-center bg-primary/10 rounded-full">
+            <Image src="/icon-connect.png" alt="Connect" width={32} height={32} className="text-primary" />
+          </div>
           <h2 className="text-xl font-semibold mb-2">Connect</h2>
           <p className="text-muted-foreground">Network with businesses from around the world</p>
         </div>
         <div className="text-center">
-          <Image src="/icon-trade.svg" alt="Trade" width={64} height={64} className="mx-auto mb-4" />
+          <div className="mx-auto mb-4 w-16 h-16 flex items-center justify-center bg-primary/10 rounded-full">
+            <Image src="/icon-trade.png" alt="Trade" width={32} height={32} className="text-primary" />
+          </div>
           <h2 className="text-xl font-semibold mb-2">Trade</h2>
           <p className="text-muted-foreground">Buy and sell products with ease and security</p>
         </div>
         <div className="text-center">
-          <Image src="/icon-grow.svg" alt="Grow" width={64} height={64} className="mx-auto mb-4" />
+          <div className="mx-auto mb-4 w-16 h-16 flex items-center justify-center bg-primary/10 rounded-full">
+            <Image src="/icon-grow.png" alt="Grow" width={32} height={32} className="text-primary" />
+          </div>
           <h2 className="text-xl font-semibold mb-2">Grow</h2>
           <p className="text-muted-foreground">Expand your business reach and increase profits</p>
         </div>
