@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { createContext, useContext, useCallback } from "react"
+import { createContext, useContext, useCallback, useState, useEffect } from "react"
 import { useAuthStatus, loginUser, logoutUser } from "@/lib/auth-client"
 
 interface AuthContextType {
@@ -14,10 +14,28 @@ interface AuthContextType {
   logout: () => Promise<{ success: boolean; error?: string }>
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined)
+// Create a default context value to prevent the "must be used within a provider" error
+const defaultContextValue: AuthContextType = {
+  user: null,
+  isLoading: true,
+  isAuthenticated: false,
+  refreshAuthState: () => {},
+  login: async () => ({ success: false, error: "Not initialized" }),
+  logout: async () => ({ success: false, error: "Not initialized" }),
+}
+
+const AuthContext = createContext<AuthContextType>(defaultContextValue)
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const { user, isLoading, isAuthenticated, refreshAuth } = useAuthStatus()
+  // Use state to track if we're on the client side
+  const [isMounted, setIsMounted] = useState(false)
+
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
+
+  // Only use the hook on the client side
+  const auth = useAuthStatus()
 
   const login = useCallback(async (email: string, password: string) => {
     return await loginUser(email, password)
@@ -27,26 +45,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return await logoutUser()
   }, [])
 
-  return (
-    <AuthContext.Provider
-      value={{
-        user,
-        isLoading,
-        isAuthenticated,
-        refreshAuthState: refreshAuth,
+  // Use the real values only when mounted (client-side)
+  const contextValue = isMounted
+    ? {
+        user: auth.user,
+        isLoading: auth.isLoading,
+        isAuthenticated: auth.isAuthenticated,
+        refreshAuthState: auth.refreshAuth,
         login,
         logout,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
-  )
+      }
+    : defaultContextValue
+
+  return <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>
 }
 
 export function useAuth() {
-  const context = useContext(AuthContext)
-  if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider")
-  }
-  return context
+  return useContext(AuthContext)
 }
