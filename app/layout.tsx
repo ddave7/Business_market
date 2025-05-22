@@ -8,8 +8,6 @@ import GlobalLoading from "./components/GlobalLoading"
 import type React from "react"
 import DollarTransferAnimation from "./components/DollarTransferAnimation"
 import { ThemeProvider } from "@/components/theme-provider"
-// Remove the AuthProvider import as it might be causing the issue
-// import { AuthProvider } from "./contexts/AuthContext"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -28,7 +26,6 @@ export default function RootLayout({
     <html lang="en" className="h-full">
       <body className={`${inter.className} flex flex-col min-h-screen bg-background`}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          {/* Remove the AuthProvider wrapper */}
           <CartProvider>
             <div className="flex flex-col min-h-screen">
               <Suspense fallback={<div className="h-16 bg-background shadow-md"></div>}>

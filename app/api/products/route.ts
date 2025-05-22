@@ -2,7 +2,6 @@ import { NextResponse } from "next/server"
 import { connectDB } from "@/lib/mongodb"
 import Product from "@/models/Product"
 import { getUserFromToken } from "@/lib/auth"
-import mongoose from "mongoose"
 
 // Set proper headers for JSON response
 const jsonHeaders = {
@@ -59,23 +58,12 @@ export async function POST(req: Request) {
     }
 
     // Validate required fields
-    const requiredFields = ["name", "description", "price", "category"]
+    const requiredFields = ["name", "description", "price", "category", "stock"]
     for (const field of requiredFields) {
       if (!data[field] && data[field] !== 0) {
         console.log(`API: Missing required field: ${field}`)
         return NextResponse.json({ error: `Missing required field: ${field}` }, { status: 400, headers: jsonHeaders })
       }
-    }
-
-    // Set default values for optional fields
-    if (!data.stock && data.stock !== 0) {
-      data.stock = 0
-      console.log("API: Setting default stock to 0")
-    }
-
-    if (!data.imageUrl) {
-      data.imageUrl = "/placeholder.svg?height=400&width=400"
-      console.log("API: Setting default image URL")
     }
 
     // Validate numeric fields
@@ -87,31 +75,19 @@ export async function POST(req: Request) {
     }
 
     if (isNaN(data.stock) || data.stock < 0) {
-      data.stock = 0
-      console.log("API: Invalid stock value, defaulting to 0")
+      return NextResponse.json(
+        { error: "Stock must be a valid positive number" },
+        { status: 400, headers: jsonHeaders },
+      )
     }
 
     // Create product
     try {
-      // Ensure user._id is a valid ObjectId
-      let businessId
-      try {
-        businessId = new mongoose.Types.ObjectId(user._id)
-      } catch (idError) {
-        console.error("API: Error converting user._id to ObjectId:", idError)
-        console.log("API: Using string ID instead")
-        businessId = user._id
-      }
-
       // Create product with business reference
-      const productData = {
+      const product = await Product.create({
         ...data,
-        business: businessId,
-      }
-
-      console.log("API: Creating product with data:", productData)
-
-      const product = await Product.create(productData)
+        business: user._id,
+      })
 
       console.log("API: Product created successfully:", product._id)
 
@@ -128,36 +104,13 @@ export async function POST(req: Request) {
         )
       }
 
-      // Try creating without validation as a fallback
-      try {
-        console.log("API: Attempting to create product without validation")
-        const productData = {
-          name: data.name || "Unnamed Product",
-          description: data.description || "No description provided",
-          price: Number.parseFloat(data.price) || 0,
-          category: data.category || "Other",
-          stock: Number.parseInt(data.stock) || 0,
-          imageUrl: data.imageUrl || "/placeholder.svg?height=400&width=400",
-          business: user._id,
-        }
-
-        // Use insertOne to bypass validation
-        const db = mongoose.connection.db
-        const result = await db.collection("products").insertOne(productData)
-
-        console.log("API: Product created without validation:", result.insertedId)
-
-        return NextResponse.json({ _id: result.insertedId, ...productData }, { status: 201, headers: jsonHeaders })
-      } catch (fallbackError) {
-        console.error("API: Fallback creation also failed:", fallbackError)
-        return NextResponse.json(
-          {
-            error: "Error creating product in database",
-            details: dbError instanceof Error ? dbError.message : "Unknown error",
-          },
-          { status: 500, headers: jsonHeaders },
-        )
-      }
+      return NextResponse.json(
+        {
+          error: "Error creating product in database",
+          details: dbError instanceof Error ? dbError.message : "Unknown error",
+        },
+        { status: 500, headers: jsonHeaders },
+      )
     }
   } catch (error) {
     console.error("API: Unexpected error creating product:", error)

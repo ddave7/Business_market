@@ -1,19 +1,42 @@
 import { NextResponse } from "next/server"
-import { getUserFromToken } from "@/lib/auth-server"
+import { cookies } from "next/headers"
+import { getUserFromToken } from "@/lib/auth"
 
-export const dynamic = "force-dynamic" // Disable caching for this route
+export const dynamic = "force-dynamic"
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    const user = await getUserFromToken()
+    const cookieStore = cookies()
+    const token = cookieStore.get("auth_token")
 
-    if (!user) {
-      return NextResponse.json({ authenticated: false, user: null })
+    if (!token) {
+      return NextResponse.json({ authenticated: false }, { status: 401 })
     }
 
-    return NextResponse.json({ authenticated: true, user })
+    // Get user data from token
+    const user = await getUserFromToken(req)
+
+    if (!user) {
+      return NextResponse.json({ authenticated: false }, { status: 401 })
+    }
+
+    // Return user data along with authentication status
+    return NextResponse.json({
+      authenticated: true,
+      user: {
+        _id: user._id.toString(),
+        businessName: user.businessName,
+        email: user.email,
+      },
+    })
   } catch (error) {
-    console.error("Error in auth check route:", error)
-    return NextResponse.json({ error: "Authentication check failed", authenticated: false }, { status: 500 })
+    console.error("Auth check error:", error)
+    return NextResponse.json(
+      {
+        authenticated: false,
+        error: "Authentication check failed",
+      },
+      { status: 500 },
+    )
   }
 }

@@ -1,58 +1,70 @@
 "use client"
 
-import { Button } from "@/components/ui/button"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { User, LogOut, Settings, ShoppingBag } from "lucide-react"
+import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { logoutUser } from "@/lib/auth-client"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Button } from "@/components/ui/button"
+import { User, LogOut } from "lucide-react"
+import DollarTransferAnimation from "./DollarTransferAnimation"
+
+interface UserData {
+  _id: string
+  businessName: string
+  email: string
+}
 
 interface UserMenuProps {
-  userData: {
-    email: string
-    businessName?: string
-  } | null
+  userData?: UserData | null
 }
 
 export function UserMenu({ userData }: UserMenuProps) {
   const router = useRouter()
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
 
   const handleLogout = async () => {
-    await logoutUser()
-    // The page will be reloaded by the logoutUser function
+    setIsLoggingOut(true)
+    try {
+      const response = await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "include",
+      })
+
+      if (response.ok) {
+        router.push("/login")
+        router.refresh()
+      } else {
+        console.error("Logout failed")
+      }
+    } catch (error) {
+      console.error("Logout error:", error)
+    } finally {
+      setIsLoggingOut(false)
+    }
   }
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="icon">
-          <User className="h-4 w-4" />
+        <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+          <User className="h-5 w-5" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuLabel>
-          {userData?.businessName || "My Account"}
-          <p className="text-xs font-normal text-muted-foreground">{userData?.email}</p>
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => router.push("/dashboard")}>
-          <Settings className="mr-2 h-4 w-4" />
-          <span>Dashboard</span>
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => router.push("/orders")}>
-          <ShoppingBag className="mr-2 h-4 w-4" />
-          <span>Orders</span>
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={handleLogout}>
-          <LogOut className="mr-2 h-4 w-4" />
-          <span>Logout</span>
+        {userData && (
+          <div className="px-2 py-1.5 text-sm font-medium border-b mb-1">{userData.businessName || userData.email}</div>
+        )}
+        <DropdownMenuItem onClick={handleLogout} disabled={isLoggingOut}>
+          {isLoggingOut ? (
+            <div className="flex items-center">
+              <DollarTransferAnimation size="small" dollarsCount={1} speed="fast" />
+              <span className="ml-2">Logging out...</span>
+            </div>
+          ) : (
+            <>
+              <LogOut className="mr-2 h-4 w-4" />
+              <span>Logout</span>
+            </>
+          )}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

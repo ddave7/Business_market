@@ -1,5 +1,3 @@
-"use client"
-
 import { redirect } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
@@ -9,7 +7,7 @@ import { connectDB } from "@/lib/mongodb"
 import Product from "@/models/Product"
 import { getUserFromToken } from "@/lib/auth"
 import { cookies } from "next/headers"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import DollarTransferAnimation from "@/app/components/DollarTransferAnimation"
 import { Suspense } from "react"
 import { format } from "date-fns"
@@ -17,67 +15,61 @@ import { Badge } from "@/components/ui/badge"
 import Order from "@/models/Order"
 
 async function getBusinessProducts() {
+  await connectDB()
+  const cookieStore = cookies()
+  const token = cookieStore.get("auth_token")?.value
+
+  if (!token) {
+    console.error("Dashboard: No auth token found, redirecting to login")
+    redirect("/login")
+  }
+
+  const user = await getUserFromToken({ headers: { cookie: `auth_token=${token}` } } as Request)
+
+  if (!user) {
+    console.error("Dashboard: No user found, redirecting to login")
+    redirect("/login")
+  }
+
   try {
-    await connectDB()
-    const cookieStore = cookies()
-    const token = cookieStore.get("auth_token")?.value
+    const products = await Product.find({ business: user._id }).sort({ createdAt: -1 }).limit(10).lean()
 
-    if (!token) {
-      console.error("Dashboard: No auth token found, redirecting to login")
-      return { redirect: true }
-    }
-
-    const user = await getUserFromToken({ headers: { cookie: `auth_token=${token}` } } as Request)
-
-    if (!user) {
-      console.error("Dashboard: No user found, redirecting to login")
-      return { redirect: true }
-    }
-
-    try {
-      const products = await Product.find({ business: user._id }).sort({ createdAt: -1 }).limit(10).lean()
-
-      console.log("Dashboard: Products fetched:", products.length)
-      return { user, products: JSON.parse(JSON.stringify(products)), error: null }
-    } catch (error) {
-      console.error("Error fetching business products:", error)
-      return { user, products: [], error: "Failed to fetch products" }
-    }
+    console.log("Dashboard: Products fetched:", products.length)
+    return { user, products: JSON.parse(JSON.stringify(products)) }
   } catch (error) {
-    console.error("Critical error in getBusinessProducts:", error)
-    return { user: null, products: [], error: "Database connection failed" }
+    console.error("Error fetching business products:", error)
+    throw new Error("Failed to fetch business products")
   }
 }
 
-async function getRecentOrders(user) {
-  if (!user) return { orders: [] }
+async function getRecentOrders() {
+  await connectDB()
+  const cookieStore = cookies()
+  const token = cookieStore.get("auth_token")?.value
+
+  if (!token) {
+    return { orders: [] }
+  }
+
+  const user = await getUserFromToken({ headers: { cookie: `auth_token=${token}` } } as Request)
+
+  if (!user) {
+    return { orders: [] }
+  }
 
   try {
-    await connectDB()
+    const orders = await Order.find({ user: user._id }).sort({ createdAt: -1 }).limit(5).lean()
 
-    try {
-      const orders = await Order.find({ user: user._id }).sort({ createdAt: -1 }).limit(5).lean()
-      return { orders: JSON.parse(JSON.stringify(orders)), error: null }
-    } catch (error) {
-      console.error("Error fetching recent orders:", error)
-      return { orders: [], error: "Failed to fetch orders" }
-    }
+    return { orders: JSON.parse(JSON.stringify(orders)) }
   } catch (error) {
-    console.error("Critical error in getRecentOrders:", error)
-    return { orders: [], error: "Database connection failed" }
+    console.error("Error fetching recent orders:", error)
+    return { orders: [] }
   }
 }
 
-function DashboardContent({ user, products, orders, productsError, ordersError }) {
+function DashboardContent({ user, products, orders }) {
   return (
     <div className="container mx-auto px-4 py-8">
-      {(productsError || ordersError) && (
-        <Alert variant="destructive" className="mb-6">
-          <AlertTitle>Error fetching data</AlertTitle>
-          <AlertDescription>{productsError || ordersError}. Please try refreshing the page.</AlertDescription>
-        </Alert>
-      )}
-
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Welcome, {user.businessName}</h1>
         <Link href="/products/add">
@@ -192,25 +184,8 @@ function DashboardContent({ user, products, orders, productsError, ordersError }
 
 export default async function DashboardPage() {
   try {
-    const { user, products, error: productsError, redirect: shouldRedirect } = await getBusinessProducts()
-
-    if (shouldRedirect) {
-      redirect("/login")
-    }
-
-    const { orders, error: ordersError } = await getRecentOrders(user)
-
-    if (productsError === "Database connection failed") {
-      return (
-        <Alert variant="destructive">
-          <AlertTitle>Database Connection Error</AlertTitle>
-          <AlertDescription>
-            We're having trouble connecting to our database. Please try again later or contact support if the problem
-            persists.
-          </AlertDescription>
-        </Alert>
-      )
-    }
+    const { user, products } = await getBusinessProducts()
+    const { orders } = await getRecentOrders()
 
     return (
       <Suspense
@@ -220,27 +195,14 @@ export default async function DashboardPage() {
           </div>
         }
       >
-        <DashboardContent
-          user={user}
-          products={products}
-          orders={orders}
-          productsError={productsError}
-          ordersError={ordersError}
-        />
+        <DashboardContent user={user} products={products} orders={orders} />
       </Suspense>
     )
   } catch (error) {
-    console.error("Unhandled error in DashboardPage:", error)
     return (
       <Alert variant="destructive">
-        <AlertTitle>Something went wrong</AlertTitle>
         <AlertDescription>
           An error occurred while fetching your data. Please try again later or contact support if the problem persists.
-          <div className="mt-4">
-            <Button onClick={() => window.location.reload()} variant="outline">
-              Retry
-            </Button>
-          </div>
         </AlertDescription>
       </Alert>
     )

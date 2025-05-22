@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Cart } from "./Cart"
@@ -9,12 +9,39 @@ import { Menu } from "lucide-react"
 import { useRouter } from "next/navigation"
 import DollarTransferAnimation from "./DollarTransferAnimation"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { useAuthStatus } from "@/lib/auth-client"
 
 export default function Header() {
-  const { user, isLoading, isAuthenticated, refreshAuth } = useAuthStatus()
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [userData, setUserData] = useState(null)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
+
+  const checkLoginStatus = useCallback(async () => {
+    setIsLoading(true)
+    try {
+      const res = await fetch("/api/auth/check", { credentials: "include" })
+      const data = await res.json()
+      setIsLoggedIn(data.authenticated)
+
+      // Store user data if available
+      if (data.authenticated && data.user) {
+        setUserData(data.user)
+      } else {
+        setUserData(null)
+      }
+    } catch (error) {
+      console.error("Error checking login status:", error)
+      setIsLoggedIn(false)
+      setUserData(null)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    checkLoginStatus()
+  }, [checkLoginStatus])
 
   const handleNavigation = useCallback(
     (path: string) => {
@@ -23,11 +50,6 @@ export default function Header() {
     },
     [router],
   )
-
-  // Force refresh auth state when header mounts
-  useEffect(() => {
-    refreshAuth()
-  }, [refreshAuth])
 
   return (
     <header className="bg-background border-b shadow-sm">
@@ -50,8 +72,8 @@ export default function Header() {
               <div className="w-20 h-8">
                 <DollarTransferAnimation size="small" dollarsCount={1} speed="fast" />
               </div>
-            ) : isAuthenticated ? (
-              <UserMenu userData={user} />
+            ) : isLoggedIn ? (
+              <UserMenu userData={userData} />
             ) : (
               <Button onClick={() => handleNavigation("/login")}>Login</Button>
             )}
@@ -77,8 +99,8 @@ export default function Header() {
               <div className="w-full h-10 flex justify-center">
                 <DollarTransferAnimation size="small" dollarsCount={1} speed="fast" />
               </div>
-            ) : isAuthenticated ? (
-              <UserMenu userData={user} />
+            ) : isLoggedIn ? (
+              <UserMenu userData={userData} />
             ) : (
               <Button className="w-full" onClick={() => handleNavigation("/login")}>
                 Login
