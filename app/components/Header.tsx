@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Cart } from "./Cart"
@@ -9,10 +9,10 @@ import { Menu } from "lucide-react"
 import { useRouter } from "next/navigation"
 import DollarTransferAnimation from "./DollarTransferAnimation"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { useAuth } from "../contexts/AuthContext"
+import { useAuthStatus } from "@/lib/auth-client"
 
 export default function Header() {
-  const { user, isLoading, isAuthenticated, refreshAuthState } = useAuth()
+  const { user, isLoading, isAuthenticated, refreshAuth } = useAuthStatus()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const router = useRouter()
 
@@ -26,8 +26,8 @@ export default function Header() {
 
   // Force refresh auth state when header mounts
   useEffect(() => {
-    refreshAuthState()
-  }, [refreshAuthState])
+    refreshAuth()
+  }, [refreshAuth])
 
   return (
     <header className="bg-background border-b shadow-sm">
@@ -94,5 +94,3 @@ export default function Header() {
     </header>
   )
 }
-
-import { useEffect } from "react"

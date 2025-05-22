@@ -64,7 +64,14 @@ export function useAuthStatus() {
     }
   }, [])
 
-  return { user, isLoading, isAuthenticated, refreshAuth: checkAuth }
+  return {
+    user,
+    isLoading,
+    isAuthenticated,
+    refreshAuth: async () => {
+      await checkAuth()
+    },
+  }
 }
 
 export async function loginUser(email: string, password: string) {
