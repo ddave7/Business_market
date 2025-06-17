@@ -86,20 +86,20 @@ export default function DollarTransferAnimation({
       <div className={`relative ${classes.container} flex items-center justify-center mb-4 w-full max-w-xs`}>
         {/* Wallet on the left */}
         <div
-          className={`absolute ${classes.icons} left-0 bg-primary/10 rounded-lg flex items-center justify-center border-2 border-primary/20 z-10 ${
+          className={`absolute ${classes.icons} left-0 bg-amber-100 rounded-lg flex items-center justify-center border-2 border-amber-300 z-10 ${
             isVisible ? "opacity-100" : "opacity-80"
           }`}
         >
-          <Wallet className="w-3/4 h-3/4 text-primary" />
+          <Wallet className="w-3/4 h-3/4 text-amber-800" />
         </div>
 
         {/* Bank on the right */}
         <div
-          className={`absolute ${classes.icons} right-0 bg-primary/10 rounded-lg flex items-center justify-center border-2 border-primary/20 z-10 ${
+          className={`absolute ${classes.icons} right-0 bg-blue-100 rounded-lg flex items-center justify-center border-2 border-blue-300 z-10 ${
             isVisible ? "opacity-100" : "opacity-80"
           }`}
         >
-          <Landmark className="w-3/4 h-3/4 text-primary" />
+          <Landmark className="w-3/4 h-3/4 text-blue-800" />
         </div>
 
         {/* Dollar bills */}
@@ -123,7 +123,7 @@ export default function DollarTransferAnimation({
         ))}
       </div>
 
-      <p className={`text-center ${classes.text} text-muted-foreground animate-pulse font-medium`}>{message}</p>
+      <p className={`text-center ${classes.text} text-gray-600 animate-pulse font-medium`}>{message}</p>
     </div>
   )
 

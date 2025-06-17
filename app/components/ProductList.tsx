@@ -3,7 +3,6 @@ import Image from "next/image"
 import Link from "next/link"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import AddToCartButton from "./AddToCartButton"
 
 type Product = {
   _id: string
@@ -36,15 +35,12 @@ const ProductCard = memo(function ProductCard({ product }: { product: Product })
         <p className="font-bold">${product.price.toFixed(2)}</p>
         <p className="text-sm text-muted-foreground">Stock: {product.stock} units</p>
       </CardContent>
-      <CardFooter className="flex gap-2">
-        <Link href={`/products/${product._id}`} className="flex-1">
+      <CardFooter>
+        <Link href={`/products/${product._id}`} className="w-full">
           <Button variant="outline" className="w-full">
             View Details
           </Button>
         </Link>
-        <div className="flex-1">
-          <AddToCartButton product={product} className="w-full" />
-        </div>
       </CardFooter>
     </Card>
   )

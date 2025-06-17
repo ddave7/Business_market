@@ -2,47 +2,41 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { User, LogOut, Settings } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { User, LogOut } from "lucide-react"
+import DollarTransferAnimation from "./DollarTransferAnimation"
 
-interface UserMenuProps {
-  userData: any
-  onLogout?: () => void
+interface UserData {
+  _id: string
+  businessName: string
+  email: string
 }
 
-export function UserMenu({ userData, onLogout }: UserMenuProps) {
+interface UserMenuProps {
+  userData?: UserData | null
+}
+
+export function UserMenu({ userData }: UserMenuProps) {
   const router = useRouter()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
 
   const handleLogout = async () => {
+    setIsLoggingOut(true)
     try {
-      setIsLoggingOut(true)
-      const res = await fetch("/api/auth/logout", {
+      const response = await fetch("/api/auth/logout", {
         method: "POST",
         credentials: "include",
-        cache: "no-store",
-        headers: {
-          "Cache-Control": "no-cache, no-store, must-revalidate",
-          Pragma: "no-cache",
-          Expires: "0",
-        },
       })
 
-      if (!res.ok) {
-        throw new Error("Logout failed")
+      if (response.ok) {
+        router.push("/login")
+        router.refresh()
+      } else {
+        console.error("Logout failed")
       }
-
-      // Call the onLogout callback if provided
-      if (onLogout) {
-        onLogout()
-      }
-
-      // Redirect to home page
-      router.push("/")
-      router.refresh()
     } catch (error) {
-      console.error("Error during logout:", error)
+      console.error("Logout error:", error)
     } finally {
       setIsLoggingOut(false)
     }
@@ -51,19 +45,26 @@ export function UserMenu({ userData, onLogout }: UserMenuProps) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" className="flex items-center gap-2">
-          <User className="h-4 w-4" />
-          <span className="max-w-[100px] truncate">{userData?.businessName || userData?.email || "User"}</span>
+        <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+          <User className="h-5 w-5" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={() => router.push("/dashboard")}>
-          <Settings className="mr-2 h-4 w-4" />
-          Dashboard
-        </DropdownMenuItem>
+        {userData && (
+          <div className="px-2 py-1.5 text-sm font-medium border-b mb-1">{userData.businessName || userData.email}</div>
+        )}
         <DropdownMenuItem onClick={handleLogout} disabled={isLoggingOut}>
-          <LogOut className="mr-2 h-4 w-4" />
-          {isLoggingOut ? "Logging out..." : "Logout"}
+          {isLoggingOut ? (
+            <div className="flex items-center">
+              <DollarTransferAnimation size="small" dollarsCount={1} speed="fast" />
+              <span className="ml-2">Logging out...</span>
+            </div>
+          ) : (
+            <>
+              <LogOut className="mr-2 h-4 w-4" />
+              <span>Logout</span>
+            </>
+          )}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

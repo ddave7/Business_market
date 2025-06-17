@@ -8,19 +8,14 @@ type CartItem = {
   name: string
   price: number
   quantity: number
-  imageUrl?: string
-  stock?: number
 }
 
 type CartContextType = {
   cart: CartItem[]
   addToCart: (item: CartItem) => void
   removeFromCart: (id: string) => void
-  updateQuantity: (id: string, quantity: number) => void
   clearCart: () => void
   getCartTotal: () => number
-  getCartCount: () => number
-  isInCart: (id: string) => boolean
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined)
@@ -53,12 +48,6 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     setCart((prevCart) => prevCart.filter((item) => item._id !== id))
   }
 
-  const updateQuantity = (id: string, quantity: number) => {
-    if (quantity < 1) return
-
-    setCart((prevCart) => prevCart.map((item) => (item._id === id ? { ...item, quantity } : item)))
-  }
-
   const clearCart = () => {
     setCart([])
   }
@@ -67,27 +56,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     return cart.reduce((total, item) => total + item.price * item.quantity, 0)
   }
 
-  const getCartCount = () => {
-    return cart.reduce((count, item) => count + item.quantity, 0)
-  }
-
-  const isInCart = (id: string) => {
-    return cart.some((item) => item._id === id)
-  }
-
   return (
-    <CartContext.Provider
-      value={{
-        cart,
-        addToCart,
-        removeFromCart,
-        updateQuantity,
-        clearCart,
-        getCartTotal,
-        getCartCount,
-        isInCart,
-      }}
-    >
+    <CartContext.Provider value={{ cart, addToCart, removeFromCart, clearCart, getCartTotal }}>
       {children}
     </CartContext.Provider>
   )

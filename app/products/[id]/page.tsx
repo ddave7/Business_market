@@ -2,13 +2,13 @@ import { notFound } from "next/navigation"
 import Image from "next/image"
 import { connectDB } from "@/lib/mongodb"
 import Product from "@/models/Product"
+import { Button } from "@/components/ui/button"
 import { getUserFromToken } from "@/lib/auth"
 import { cookies } from "next/headers"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { retry } from "@/lib/utils"
 import { Suspense } from "react"
 import DollarTransferAnimation from "@/app/components/DollarTransferAnimation"
-import AddToCartButton from "@/app/components/AddToCartButton"
 
 async function getProduct(id: string) {
   try {
@@ -53,7 +53,7 @@ function ProductDetail({ product }) {
           <p className="mb-4">Category: {product.category}</p>
           <p className="mb-4">Stock: {product.stock} units</p>
           <p className="mb-4">Seller: {product.business.businessName}</p>
-          <AddToCartButton product={product} />
+          <Button>Add to Cart</Button>
         </div>
       </div>
     </div>

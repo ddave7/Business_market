@@ -1,63 +1,42 @@
 import { NextResponse } from "next/server"
+import { cookies } from "next/headers"
 import { getUserFromToken } from "@/lib/auth"
 
-export const dynamic = "force-dynamic" // Disable caching for this route
+export const dynamic = "force-dynamic"
 
 export async function GET(req: Request) {
   try {
-    console.log("Auth check request received")
+    const cookieStore = cookies()
+    const token = cookieStore.get("auth_token")
 
+    if (!token) {
+      return NextResponse.json({ authenticated: false }, { status: 401 })
+    }
+
+    // Get user data from token
     const user = await getUserFromToken(req)
 
     if (!user) {
-      console.log("Auth check: No authenticated user found")
-      return NextResponse.json(
-        { authenticated: false },
-        {
-          status: 200,
-          headers: {
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            Pragma: "no-cache",
-            Expires: "0",
-          },
-        },
-      )
+      return NextResponse.json({ authenticated: false }, { status: 401 })
     }
 
-    console.log("Auth check: User authenticated", user._id)
-    return NextResponse.json(
-      {
-        authenticated: true,
-        user: {
-          _id: user._id,
-          email: user.email,
-          businessName: user.businessName,
-        },
+    // Return user data along with authentication status
+    return NextResponse.json({
+      authenticated: true,
+      user: {
+        _id: user._id.toString(),
+        businessName: user.businessName,
+        email: user.email,
       },
-      {
-        status: 200,
-        headers: {
-          "Cache-Control": "no-cache, no-store, must-revalidate",
-          Pragma: "no-cache",
-          Expires: "0",
-        },
-      },
-    )
+    })
   } catch (error) {
     console.error("Auth check error:", error)
     return NextResponse.json(
       {
         authenticated: false,
-        error: "Error checking authentication status",
+        error: "Authentication check failed",
       },
-      {
-        status: 500,
-        headers: {
-          "Cache-Control": "no-cache, no-store, must-revalidate",
-          Pragma: "no-cache",
-          Expires: "0",
-        },
-      },
+      { status: 500 },
     )
   }
 }
