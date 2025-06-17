@@ -13,39 +13,37 @@ if (!cached) {
 }
 
 export async function connectDB() {
-  if (cached.conn) {
-    console.log("Using existing database connection")
-    return cached.conn
-  }
-
-  if (!cached.promise) {
-    const opts = {
-      bufferCommands: false,
+  try {
+    if (cached.conn) {
+      console.log("Using existing database connection")
+      return cached.conn
     }
 
-    console.log("Creating new database connection")
-    cached.promise = mongoose.connect(MONGODB_URI!, opts).then((mongoose) => {
-      console.log("Connected to MongoDB")
-      return mongoose
-    })
-  }
+    if (!cached.promise) {
+      const opts = {
+        bufferCommands: false,
+        connectTimeoutMS: 10000,
+        socketTimeoutMS: 45000,
+        serverSelectionTimeoutMS: 10000,
+      }
 
-  try {
+      console.log("Creating new database connection")
+      cached.promise = mongoose.connect(MONGODB_URI!, opts).then((mongoose) => {
+        console.log("Connected to MongoDB")
+        return mongoose
+      })
+    }
+
     cached.conn = await cached.promise
+    return cached.conn
   } catch (e) {
     cached.promise = null
     console.error("Failed to connect to MongoDB:", e)
     throw e
   }
-
-  // Ensure models are imported after connection is established
-  // This is just to make sure the models are registered
-  require("@/models/User")
-  require("@/models/Product")
-
-  return cached.conn
 }
 
+// Add connection event handlers
 mongoose.connection.on("error", (err) => {
   console.error("MongoDB connection error:", err)
 })
@@ -54,7 +52,11 @@ mongoose.connection.on("disconnected", () => {
   console.log("MongoDB disconnected")
 })
 
+// Gracefully close the connection when the app is shutting down
 process.on("SIGINT", async () => {
-  await mongoose.connection.close()
+  if (mongoose.connection.readyState === 1) {
+    await mongoose.connection.close()
+    console.log("MongoDB connection closed due to app termination")
+  }
   process.exit(0)
 })

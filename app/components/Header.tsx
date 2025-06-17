@@ -8,18 +8,34 @@ import { UserMenu } from "./UserMenu"
 import { Menu } from "lucide-react"
 import { useRouter } from "next/navigation"
 import DollarTransferAnimation from "./DollarTransferAnimation"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 export default function Header() {
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [userData, setUserData] = useState(null)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  const [checkError, setCheckError] = useState(false)
   const router = useRouter()
 
   const checkLoginStatus = useCallback(async () => {
     setIsLoading(true)
+    setCheckError(false)
     try {
-      const res = await fetch("/api/auth/check", { credentials: "include" })
+      const res = await fetch("/api/auth/check", {
+        credentials: "include",
+        cache: "no-store",
+        headers: {
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+      })
+
+      if (!res.ok) {
+        throw new Error("Failed to check authentication status")
+      }
+
       const data = await res.json()
       setIsLoggedIn(data.authenticated)
 
@@ -33,6 +49,7 @@ export default function Header() {
       console.error("Error checking login status:", error)
       setIsLoggedIn(false)
       setUserData(null)
+      setCheckError(true)
     } finally {
       setIsLoading(false)
     }
@@ -40,6 +57,16 @@ export default function Header() {
 
   useEffect(() => {
     checkLoginStatus()
+
+    // Set up an interval to periodically check login status
+    const intervalId = setInterval(
+      () => {
+        checkLoginStatus()
+      },
+      5 * 60 * 1000,
+    ) // Check every 5 minutes
+
+    return () => clearInterval(intervalId)
   }, [checkLoginStatus])
 
   const handleNavigation = useCallback(
@@ -51,10 +78,10 @@ export default function Header() {
   )
 
   return (
-    <header className="bg-white shadow-md">
+    <header className="bg-background border-b shadow-sm">
       <nav className="container mx-auto px-4 py-4">
         <div className="flex justify-between items-center">
-          <Link href="/" className="text-xl font-bold">
+          <Link href="/" className="text-xl font-bold text-foreground">
             Commercial Marketplace
           </Link>
           <div className="hidden md:flex space-x-4 items-center">
@@ -71,11 +98,16 @@ export default function Header() {
               <div className="w-20 h-8">
                 <DollarTransferAnimation size="small" dollarsCount={1} speed="fast" />
               </div>
+            ) : checkError ? (
+              <Button onClick={checkLoginStatus} variant="outline" size="sm">
+                Retry
+              </Button>
             ) : isLoggedIn ? (
-              <UserMenu userData={userData} />
+              <UserMenu userData={userData} onLogout={checkLoginStatus} />
             ) : (
               <Button onClick={() => handleNavigation("/login")}>Login</Button>
             )}
+            <ThemeToggle />
             <Cart />
           </div>
           <button className="md:hidden" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
@@ -83,7 +115,7 @@ export default function Header() {
           </button>
         </div>
         {isMobileMenuOpen && (
-          <div className="mt-4 md:hidden space-y-2">
+          <div className="mt-4 md:hidden space-y-2 bg-background border rounded-md p-3">
             <Button variant="ghost" className="w-full justify-start" onClick={() => handleNavigation("/dashboard")}>
               Dashboard
             </Button>
@@ -97,13 +129,20 @@ export default function Header() {
               <div className="w-full h-10 flex justify-center">
                 <DollarTransferAnimation size="small" dollarsCount={1} speed="fast" />
               </div>
+            ) : checkError ? (
+              <Button onClick={checkLoginStatus} className="w-full">
+                Retry Authentication Check
+              </Button>
             ) : isLoggedIn ? (
-              <UserMenu userData={userData} />
+              <UserMenu userData={userData} onLogout={checkLoginStatus} />
             ) : (
               <Button className="w-full" onClick={() => handleNavigation("/login")}>
                 Login
               </Button>
             )}
+            <div className="flex justify-center py-2">
+              <ThemeToggle />
+            </div>
             <Cart />
           </div>
         )}
